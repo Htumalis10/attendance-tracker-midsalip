@@ -1,0 +1,167 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - for both admins and students
+model User {
+  id            String    @id @default(cuid())
+  schoolId      String    @unique // e.g., "20240001" for students, "ADMIN001" for admins
+  name          String
+  email         String    @unique
+  phone         String?
+  course        String?   // For students: "BS Information Technology"
+  year          String?   // For students: "3rd Year", For faculty: "Faculty"
+  role          Role      @default(STUDENT)
+  status        Status    @default(ACTIVE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  attendanceRecords AttendanceRecord[]
+  certificates      Certificate[]
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  STUDENT
+  FACULTY
+  STAFF
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+// Event model
+model Event {
+  id          String      @id @default(cuid())
+  name        String
+  description String?     @db.Text
+  date        DateTime
+  venue       String
+  organizer   String
+  timeIn      String      // Expected time in (e.g., "08:00")
+  timeOut     String      // Expected time out (e.g., "12:00")
+  status      EventStatus @default(UPCOMING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  attendanceRecords AttendanceRecord[]
+  certificates      Certificate[]
+  notifications     Notification[]
+
+  @@map("events")
+}
+
+enum EventStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+// Attendance Record model
+model AttendanceRecord {
+  id            String           @id @default(cuid())
+  userId        String
+  eventId       String
+  timeIn        DateTime?
+  timeOut       DateTime?
+  status        AttendanceStatus @default(PENDING)
+  lateMinutes   Int?             // Minutes late if applicable
+  approvedBy    String?          // Admin who approved/rejected
+  notes         String?          @db.Text
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("attendance_records")
+}
+
+enum AttendanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PRESENT
+  ABSENT
+  INSIDE
+}
+
+// Certificate model
+model Certificate {
+  id          String   @id @default(cuid())
+  userId      String
+  eventId     String
+  title       String
+  issuedAt    DateTime @default(now())
+  downloaded  Boolean  @default(false)
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("certificates")
+}
+
+// Scanner Device model (for sync status)
+model ScannerDevice {
+  id             String       @id @default(cuid())
+  deviceId       String       @unique // e.g., "SCAN-01"
+  name           String
+  location       String
+  status         DeviceStatus @default(OFFLINE)
+  lastSync       DateTime?
+  offlineRecords Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("scanner_devices")
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+}
+
+// Notification model
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  eventId   String?
+  title     String
+  message   String           @db.Text
+  type      NotificationType @default(EVENT_CREATED)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_REMINDER
+  ATTENDANCE_CONFIRMED
+  CERTIFICATE_AVAILABLE
+}
