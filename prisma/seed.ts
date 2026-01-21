@@ -148,17 +148,27 @@ async function main() {
 
   console.log("✅ Created 1 staff user")
 
-  // Create Events
+  // Helper function to create dates relative to today
+  const today = new Date()
+  const getDateOffset = (daysOffset: number) => {
+    const date = new Date(today)
+    date.setDate(date.getDate() + daysOffset)
+    // Set to noon to avoid timezone issues
+    date.setHours(12, 0, 0, 0)
+    return date
+  }
+
+  // Create Events with dynamic dates relative to today
   const events = await Promise.all([
     prisma.event.create({
       data: {
-        name: "Programming Seminar 2024",
+        name: "Programming Seminar 2026",
         description: "An in-depth seminar on modern programming practices and technologies.",
-        date: new Date("2024-01-20"),
+        date: getDateOffset(0), // Today
         venue: "Auditorium A",
         organizer: "IT Department",
         timeIn: "08:00",
-        timeOut: "12:00",
+        timeOut: "17:00",
         status: EventStatus.ACTIVE,
       },
     }),
@@ -166,19 +176,19 @@ async function main() {
       data: {
         name: "Leadership Workshop",
         description: "Workshop on developing leadership skills for student leaders.",
-        date: new Date("2024-01-22"),
+        date: getDateOffset(3), // 3 days from now
         venue: "Conference Room 1",
         organizer: "Student Affairs",
         timeIn: "14:00",
         timeOut: "17:00",
-        status: EventStatus.ACTIVE,
+        status: EventStatus.UPCOMING,
       },
     }),
     prisma.event.create({
       data: {
         name: "Health & Wellness Fair",
         description: "Annual health fair with free checkups and wellness activities.",
-        date: new Date("2024-01-25"),
+        date: getDateOffset(7), // 7 days from now
         venue: "Campus Grounds",
         organizer: "Health Services",
         timeIn: "09:00",
@@ -190,7 +200,7 @@ async function main() {
       data: {
         name: "Annual Faculty Meeting",
         description: "Yearly meeting for all faculty members.",
-        date: new Date("2024-01-18"),
+        date: getDateOffset(-5), // 5 days ago
         venue: "Board Room",
         organizer: "Administration",
         timeIn: "10:00",
@@ -200,9 +210,9 @@ async function main() {
     }),
     prisma.event.create({
       data: {
-        name: "Career Fair 2024",
+        name: "Career Fair 2026",
         description: "Annual career fair with top companies and recruitment opportunities.",
-        date: new Date("2024-02-15"),
+        date: getDateOffset(30), // 30 days from now
         venue: "Main Gymnasium",
         organizer: "Career Services",
         timeIn: "09:00",
@@ -210,19 +220,38 @@ async function main() {
         status: EventStatus.UPCOMING,
       },
     }),
+    prisma.event.create({
+      data: {
+        name: "Night Networking Event",
+        description: "Evening networking event for students and industry professionals.",
+        date: getDateOffset(5), // 5 days from now
+        venue: "Campus Ballroom",
+        organizer: "Alumni Association",
+        timeIn: "18:00", // 6:00 PM
+        timeOut: "21:00", // 9:00 PM
+        status: EventStatus.UPCOMING,
+      },
+    }),
   ])
 
   console.log(`✅ Created ${events.length} events`)
 
+  // Helper to create time for a specific date
+  const getTimeOnDate = (dateOffset: number, hours: number, minutes: number) => {
+    const date = getDateOffset(dateOffset)
+    date.setHours(hours, minutes, 0, 0)
+    return date
+  }
+
   // Create Attendance Records
   const attendanceRecords = await Promise.all([
-    // Programming Seminar attendance
+    // Programming Seminar attendance (today's event)
     prisma.attendanceRecord.create({
       data: {
         userId: students[0].id,
         eventId: events[0].id,
-        timeIn: new Date("2024-01-20T08:05:00"),
-        timeOut: new Date("2024-01-20T11:55:00"),
+        timeIn: getTimeOnDate(0, 8, 5),
+        timeOut: getTimeOnDate(0, 11, 55),
         status: "PRESENT",
         lateMinutes: 5,
       },
@@ -231,7 +260,7 @@ async function main() {
       data: {
         userId: students[1].id,
         eventId: events[0].id,
-        timeIn: new Date("2024-01-20T08:32:00"),
+        timeIn: getTimeOnDate(0, 8, 32),
         status: "INSIDE",
         lateMinutes: 32,
       },
@@ -240,8 +269,8 @@ async function main() {
       data: {
         userId: students[2].id,
         eventId: events[0].id,
-        timeIn: new Date("2024-01-20T07:55:00"),
-        timeOut: new Date("2024-01-20T12:05:00"),
+        timeIn: getTimeOnDate(0, 7, 55),
+        timeOut: getTimeOnDate(0, 12, 5),
         status: "PRESENT",
       },
     }),
@@ -252,13 +281,13 @@ async function main() {
         status: "ABSENT",
       },
     }),
-    // Leadership Workshop attendance
+    // Annual Faculty Meeting attendance (past event - 5 days ago)
     prisma.attendanceRecord.create({
       data: {
         userId: students[4].id,
-        eventId: events[1].id,
-        timeIn: new Date("2024-01-22T14:02:00"),
-        timeOut: new Date("2024-01-22T17:00:00"),
+        eventId: events[3].id,
+        timeIn: getTimeOnDate(-5, 10, 2),
+        timeOut: getTimeOnDate(-5, 12, 0),
         status: "PRESENT",
         lateMinutes: 2,
       },
@@ -266,9 +295,9 @@ async function main() {
     prisma.attendanceRecord.create({
       data: {
         userId: students[5].id,
-        eventId: events[1].id,
-        timeIn: new Date("2024-01-22T14:15:00"),
-        timeOut: new Date("2024-01-22T16:45:00"),
+        eventId: events[3].id,
+        timeIn: getTimeOnDate(-5, 10, 15),
+        timeOut: getTimeOnDate(-5, 11, 45),
         status: "PRESENT",
         lateMinutes: 15,
       },
@@ -277,30 +306,22 @@ async function main() {
 
   console.log(`✅ Created ${attendanceRecords.length} attendance records`)
 
-  // Create Certificates
+  // Create Certificates (only for past/closed events)
   const certificates = await Promise.all([
     prisma.certificate.create({
       data: {
-        userId: students[0].id,
-        eventId: events[0].id,
-        title: "Certificate of Participation - Programming Seminar 2024",
-        downloaded: true,
-      },
-    }),
-    prisma.certificate.create({
-      data: {
-        userId: students[2].id,
-        eventId: events[0].id,
-        title: "Certificate of Participation - Programming Seminar 2024",
-        downloaded: false,
-      },
-    }),
-    prisma.certificate.create({
-      data: {
-        userId: students[0].id,
+        userId: students[4].id,
         eventId: events[3].id,
         title: "Certificate of Attendance - Annual Faculty Meeting",
         downloaded: true,
+      },
+    }),
+    prisma.certificate.create({
+      data: {
+        userId: students[5].id,
+        eventId: events[3].id,
+        title: "Certificate of Attendance - Annual Faculty Meeting",
+        downloaded: false,
       },
     }),
   ])

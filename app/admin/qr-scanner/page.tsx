@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Camera, X, CheckCircle, AlertCircle, Clock, User, ChevronDown, Loader2, QrCode, Volume2, VolumeX, Wifi, WifiOff, CloudOff, RotateCcw } from "lucide-react"
+import { Camera, X, CheckCircle, AlertCircle, Clock, User, ChevronDown, Loader2, QrCode, Volume2, VolumeX, Wifi, WifiOff, CloudOff, RotateCcw, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Scanner } from "@yudiel/react-qr-scanner"
 import { toast } from "sonner"
+import { formatTimeDisplay } from "@/lib/time-utils"
 import { 
   isOnline, 
   setupSyncListeners, 
@@ -12,6 +13,7 @@ import {
   getPendingRecords, 
   syncAllPending,
   getSyncStatus,
+  getDeviceInfo,
   type OfflineAttendanceRecord 
 } from "@/lib/offline-sync"
 
@@ -48,10 +50,17 @@ interface UserData {
   year: string | null
 }
 
+// Helper to get today's date key for localStorage
+const getTodayKey = () => {
+  const today = new Date()
+  return `scanHistory_${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 export default function QRScanner() {
   const [isCameraActive, setIsCameraActive] = useState(true)
   const [scannedData, setScannedData] = useState<ScannedStudent | null>(null)
   const [scanHistory, setScanHistory] = useState<ScannedStudent[]>([])
+  const [isHydrated, setIsHydrated] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState("Select Event")
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -66,6 +75,22 @@ export default function QRScanner() {
   const [scanMode, setScanMode] = useState<"time-in" | "time-out">("time-in")
   const [currentTime, setCurrentTime] = useState(new Date())
 
+  // Load scan history from localStorage on mount (client-side only)
+  useEffect(() => {
+    const saved = localStorage.getItem(getTodayKey())
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          setScanHistory(parsed)
+        }
+      } catch (e) {
+        console.error('Failed to parse scan history from localStorage:', e)
+      }
+    }
+    setIsHydrated(true)
+  }, [])
+
   // Update current time every second for real-time checking
   useEffect(() => {
     const timer = setInterval(() => {
@@ -73,6 +98,37 @@ export default function QRScanner() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // Save scan history to localStorage whenever it changes
+  useEffect(() => {
+    if (isHydrated && scanHistory.length > 0) {
+      localStorage.setItem(getTodayKey(), JSON.stringify(scanHistory))
+    }
+  }, [scanHistory, isHydrated])
+
+  // Auto-switch to Time Out mode when Time In period ends
+  useEffect(() => {
+    if (selectedEventId && isTimeOutAvailable() && scanMode === "time-in") {
+      setScanMode("time-out")
+      setScanError(null)
+    }
+  }, [currentTime, selectedEventId, scanMode])
+
+  // Check if time-in is available (current time < scheduled time-out)
+  // Time-in is allowed from event start until the event ends
+  const isTimeInAvailable = () => {
+    if (!selectedEventId) return false
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event?.timeOut) return false
+    
+    const [hours, minutes] = event.timeOut.split(":").map(Number)
+    const timeOutDate = new Date()
+    timeOutDate.setHours(hours, minutes, 0, 0)
+    
+    // Use fresh Date() instead of currentTime state for accurate check
+    const now = new Date()
+    return now < timeOutDate
+  }
 
   // Check if time-out is available (current time >= scheduled time-out)
   const isTimeOutAvailable = () => {
@@ -84,7 +140,91 @@ export default function QRScanner() {
     const timeOutDate = new Date()
     timeOutDate.setHours(hours, minutes, 0, 0)
     
-    return currentTime >= timeOutDate
+    // Use fresh Date() instead of currentTime state for accurate check
+    const now = new Date()
+    return now >= timeOutDate
+  }
+
+  // Calculate grace period based on event duration
+  const calculateGracePeriod = (timeIn: string, timeOut: string): number => {
+    const [inHour, inMin] = timeIn.split(":").map(Number)
+    const [outHour, outMin] = timeOut.split(":").map(Number)
+    
+    // Calculate duration in minutes
+    const startMinutes = inHour * 60 + inMin
+    const endMinutes = outHour * 60 + outMin
+    const durationMinutes = endMinutes - startMinutes
+    
+    // Determine grace period based on duration
+    if (durationMinutes <= 10) {
+      return 10 // 10 minutes grace for 5-10 min events
+    } else if (durationMinutes <= 30) {
+      return 20 // 20 minutes grace for 20-30 min events
+    } else if (durationMinutes <= 60) {
+      return 30 // 30 minutes grace for up to 1 hour events
+    } else {
+      return 60 // 1 hour grace for events longer than 1 hour
+    }
+  }
+
+  // Check if time-out grace period is still active
+  const isTimeOutGracePeriodActive = () => {
+    if (!selectedEventId) return false
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event?.timeIn || !event?.timeOut) return false
+    
+    const [outHours, outMinutes] = event.timeOut.split(":").map(Number)
+    const timeOutDate = new Date()
+    timeOutDate.setHours(outHours, outMinutes, 0, 0)
+    
+    const gracePeriod = calculateGracePeriod(event.timeIn, event.timeOut)
+    const graceEndDate = new Date(timeOutDate.getTime() + gracePeriod * 60 * 1000)
+    
+    const now = new Date()
+    return now >= timeOutDate && now < graceEndDate
+  }
+
+  // Get time-out grace period countdown info
+  const getTimeOutGraceInfo = () => {
+    if (!selectedEventId) return null
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event?.timeIn || !event?.timeOut) return null
+    
+    const [outHours, outMinutes] = event.timeOut.split(":").map(Number)
+    const timeOutDate = new Date()
+    timeOutDate.setHours(outHours, outMinutes, 0, 0)
+    
+    const gracePeriod = calculateGracePeriod(event.timeIn, event.timeOut)
+    const graceEndDate = new Date(timeOutDate.getTime() + gracePeriod * 60 * 1000)
+    
+    const now = currentTime
+    
+    // If before time-out time, not in grace period yet
+    if (now < timeOutDate) {
+      return null
+    }
+    
+    // If within grace period
+    if (now >= timeOutDate && now < graceEndDate) {
+      const diff = graceEndDate.getTime() - now.getTime()
+      const minsLeft = Math.floor(diff / 60000)
+      const secsLeft = Math.floor((diff % 60000) / 1000)
+      return {
+        status: "grace-active",
+        message: `Time-out grace period: ${minsLeft}m ${secsLeft}s remaining`,
+        countdown: `${minsLeft}:${secsLeft.toString().padStart(2, '0')}`,
+        gracePeriod,
+        timeRemaining: diff
+      }
+    }
+    
+    // Grace period ended, event will close
+    return {
+      status: "grace-ended",
+      message: "Grace period ended - Event closing",
+      gracePeriod,
+      timeRemaining: 0
+    }
   }
 
   // Get time remaining until time-out is available
@@ -112,6 +252,61 @@ export default function QRScanner() {
     return `${secondsLeft}s`
   }
 
+  // Late threshold in minutes
+  const LATE_THRESHOLD_MINUTES = 5
+
+  // Get time info for late countdown
+  const getLateCountdownInfo = () => {
+    if (!selectedEventId) return null
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event?.timeIn) return null
+    
+    const [hours, minutes] = event.timeIn.split(":").map(Number)
+    const eventStartTime = new Date()
+    eventStartTime.setHours(hours, minutes, 0, 0)
+    
+    const lateThresholdTime = new Date(eventStartTime.getTime() + LATE_THRESHOLD_MINUTES * 60 * 1000)
+    const now = currentTime
+    
+    // Calculate minutes since event started
+    const minutesSinceStart = Math.floor((now.getTime() - eventStartTime.getTime()) / 60000)
+    
+    // If before event start
+    if (now < eventStartTime) {
+      const diff = eventStartTime.getTime() - now.getTime()
+      const minsLeft = Math.floor(diff / 60000)
+      const secsLeft = Math.floor((diff % 60000) / 1000)
+      return {
+        status: "before-start",
+        message: `Event starts in ${minsLeft}m ${secsLeft}s`,
+        minutesSinceStart: 0,
+        isLate: false
+      }
+    }
+    
+    // If within grace period (not late yet)
+    if (now < lateThresholdTime) {
+      const diff = lateThresholdTime.getTime() - now.getTime()
+      const minsLeft = Math.floor(diff / 60000)
+      const secsLeft = Math.floor((diff % 60000) / 1000)
+      return {
+        status: "on-time",
+        message: `${minsLeft}m ${secsLeft}s until late`,
+        countdown: `${minsLeft}:${secsLeft.toString().padStart(2, '0')}`,
+        minutesSinceStart,
+        isLate: false
+      }
+    }
+    
+    // Already past late threshold
+    return {
+      status: "late",
+      message: `${minutesSinceStart - LATE_THRESHOLD_MINUTES}m past grace period`,
+      minutesSinceStart,
+      isLate: true
+    }
+  }
+
   // Fetch events function (extracted for reuse)
   const fetchEvents = async (isInitial = false) => {
     if (isInitial) setIsLoadingEvents(true)
@@ -119,21 +314,12 @@ export default function QRScanner() {
       const response = await fetch("/api/events?status=ACTIVE")
       if (response.ok) {
         const data = await response.json()
-        const previousEventIds = events.map(e => e.id)
         setEvents(data)
         
         // Auto-select first active event only on initial load or if no event selected
         if (isInitial && data.length > 0 && !selectedEventId) {
           setSelectedEvent(data[0].name)
           setSelectedEventId(data[0].id)
-        }
-        
-        // Check for new events and notify
-        if (!isInitial && data.length > 0) {
-          const newEvents = data.filter((e: Event) => !previousEventIds.includes(e.id))
-          if (newEvents.length > 0) {
-            toast.info(`${newEvents.length} new event${newEvents.length > 1 ? 's' : ''} available`)
-          }
         }
       }
     } catch (err) {
@@ -282,10 +468,26 @@ export default function QRScanner() {
       return
     }
 
+    // Auto-switch to time-out mode if time-in period has ended
+    let effectiveScanMode = scanMode
+    if (scanMode === "time-in" && isTimeOutAvailable()) {
+      effectiveScanMode = "time-out"
+      setScanMode("time-out")
+      console.log("Auto-switched to time-out mode")
+    }
+
     // Prevent time-out scans before scheduled time
-    if (scanMode === "time-out" && !isTimeOutAvailable()) {
+    if (effectiveScanMode === "time-out" && !isTimeOutAvailable()) {
       const event = events.find(e => e.id === selectedEventId)
       setScanError(`Time Out scanning not available until ${event?.timeOut || "scheduled time"}`)
+      playBeep(false)
+      return
+    }
+
+    // Prevent time-out scans after grace period has ended
+    const graceInfo = getTimeOutGraceInfo()
+    if (effectiveScanMode === "time-out" && graceInfo?.status === "grace-ended") {
+      setScanError("Time Out grace period has ended. Event is now closed.")
       playBeep(false)
       return
     }
@@ -320,7 +522,8 @@ export default function QRScanner() {
       const student = users[0]
       
       // For time-out, check if student has checked in first
-      if (scanMode === "time-out") {
+      let missedTimeIn = false
+      if (effectiveScanMode === "time-out") {
         // Check if already scanned for time-out
         const alreadyTimedOut = scanHistory.find(
           s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-out"
@@ -344,9 +547,8 @@ export default function QRScanner() {
               const records = await attendanceRes.json()
               const hasDbTimeIn = records.length > 0 && records[0].timeIn
               if (!hasDbTimeIn) {
-                setScanError(`${student.name} must time-in first before timing out`)
-                playBeep(false)
-                return
+                // Allow time-out but mark as late since they missed time-in
+                missedTimeIn = true
               }
             }
           } catch (err) {
@@ -354,6 +556,13 @@ export default function QRScanner() {
           }
         }
       } else {
+        // For time-in, check if time-in period is still available
+        if (!isTimeInAvailable()) {
+          setScanError("Time-in period has ended. The event has finished.")
+          playBeep(false)
+          return
+        }
+        
         // For time-in, check if already scanned
         const alreadyScanned = scanHistory.find(
           s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-in"
@@ -371,13 +580,13 @@ export default function QRScanner() {
       
       // Calculate late minutes based on event time-in
       let lateMinutes = 0
-      if (selectedEventData?.timeIn && scanMode === "time-in") {
+      if (selectedEventData?.timeIn && effectiveScanMode === "time-in") {
         const [hours, mins] = selectedEventData.timeIn.split(":").map(Number)
         const eventStartTime = new Date()
         eventStartTime.setHours(hours, mins, 0, 0)
         lateMinutes = Math.max(0, Math.floor((now.getTime() - eventStartTime.getTime()) / 60000))
       }
-      const isLate = lateMinutes > 15 // 15 minute grace period
+      const isLate = lateMinutes > LATE_THRESHOLD_MINUTES // 15 minute grace period
 
       const scannedStudent: ScannedStudent = {
         id: Date.now().toString(),
@@ -388,15 +597,16 @@ export default function QRScanner() {
         year: student.year || "N/A",
         event: selectedEvent,
         eventId: selectedEventId,
-        timeIn: scanMode === "time-in" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
-        timeOut: scanMode === "time-out" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
-        scanType: scanMode,
+        timeIn: effectiveScanMode === "time-in" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
+        timeOut: effectiveScanMode === "time-out" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
+        scanType: effectiveScanMode,
         status: "approved", // Auto-approve
-        lateMinutes: scanMode === "time-in" && isLate ? lateMinutes : undefined,
+        lateMinutes: effectiveScanMode === "time-in" && isLate ? lateMinutes : (missedTimeIn ? -1 : undefined), // -1 indicates missed time-in
       }
 
       // Auto-save to database immediately
-      const attendanceStatus = scanMode === "time-out" ? "PRESENT" : (isLate ? "LATE" : "PRESENT")
+      // Mark as LATE if: late for time-in, OR missed time-in entirely (time-out only)
+      const attendanceStatus = missedTimeIn ? "LATE" : (effectiveScanMode === "time-out" ? "PRESENT" : (isLate ? "LATE" : "PRESENT"))
       
       if (!networkOnline) {
         // Save offline
@@ -409,12 +619,18 @@ export default function QRScanner() {
           status: attendanceStatus,
           timeIn: scannedStudent.timeIn || "",
           timeOut: scannedStudent.timeOut || "",
-          type: scanMode,
+          type: effectiveScanMode,
         })
         setPendingOfflineCount(getPendingRecords().length)
         playBeep(true)
         setScanHistory([scannedStudent, ...scanHistory])
-        toast.warning(`Saved offline: ${student.name} (${scanMode === "time-in" ? "Time In" : "Time Out"})`)
+        
+        // Show appropriate offline toast
+        if (missedTimeIn) {
+          toast.warning(`Saved offline: ${student.name} - Time Out (Marked LATE - No Time In)`)
+        } else {
+          toast.warning(`Saved offline: ${student.name} (${effectiveScanMode === "time-in" ? "Time In" : "Time Out"})`)
+        }
       } else {
         // Save to database immediately
         try {
@@ -424,7 +640,7 @@ export default function QRScanner() {
             body: JSON.stringify({
               userId: student.id,
               eventId: selectedEventId,
-              type: scanMode,
+              type: effectiveScanMode,
               status: attendanceStatus,
             }),
           })
@@ -436,7 +652,14 @@ export default function QRScanner() {
 
           playBeep(true)
           setScanHistory([scannedStudent, ...scanHistory])
-          toast.success(`${scanMode === "time-in" ? "Time In" : "Time Out"}: ${student.name}${isLate && scanMode === "time-in" ? ` (Late: ${lateMinutes} mins)` : ""}`)
+          
+          // Only show toast for warnings (late arrival, missed time-in)
+          if (missedTimeIn) {
+            toast.warning(`Time Out: ${student.name} (Marked LATE - No Time In)`)
+          } else if (isLate && effectiveScanMode === "time-in") {
+            toast.warning(`Time In: ${student.name} (Late: ${lateMinutes} mins)`)
+          }
+          // No toast for normal successful scans - just beep sound
         } catch (err: any) {
           // If network error, save offline
           if (!navigator.onLine || err.message.includes("fetch")) {
@@ -450,7 +673,7 @@ export default function QRScanner() {
               status: attendanceStatus,
               timeIn: scannedStudent.timeIn || "",
               timeOut: scannedStudent.timeOut || "",
-              type: scanMode,
+              type: effectiveScanMode,
             })
             setPendingOfflineCount(getPendingRecords().length)
             playBeep(true)
@@ -611,13 +834,28 @@ export default function QRScanner() {
 
       {/* Offline Mode Banner */}
       {!networkOnline && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 sm:p-4 flex items-start gap-2 sm:gap-3">
-          <WifiOff className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-yellow-700 dark:text-yellow-300 text-sm sm:text-base">Offline Mode Active</p>
-            <p className="text-xs sm:text-sm text-yellow-600 dark:text-yellow-400 mt-1">
-              Attendance records will be saved locally and automatically synced when you're back online.
-            </p>
+        <div className="bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border-2 border-yellow-500/30 rounded-xl p-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-yellow-500/20 rounded-lg">
+              <WifiOff className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-yellow-700 dark:text-yellow-300">Offline Mode Active</p>
+              <p className="text-sm text-yellow-600/80 dark:text-yellow-400/80 mt-1">
+                You can still scan QR codes! Records will be saved on this device ({getDeviceInfo().deviceName.replace(/📱|💻|🖥️|📟/g, '').trim()}) 
+                and automatically synced when you&apos;re back online.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="text-xs bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded font-mono">
+                  {getDeviceInfo().deviceId}
+                </span>
+                {pendingOfflineCount > 0 && (
+                  <span className="text-xs bg-orange-500/20 text-orange-700 dark:text-orange-300 px-2 py-1 rounded">
+                    {pendingOfflineCount} records pending sync
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -637,7 +875,6 @@ export default function QRScanner() {
                     allowMultiple={false}
                     scanDelay={1000}
                     components={{
-                      audio: false,
                       torch: true,
                       finder: true,
                     }}
@@ -736,12 +973,12 @@ export default function QRScanner() {
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-4 h-4 text-green-600 dark:text-green-400" />
                     <span className="text-muted-foreground">Time In:</span>
-                    <span className="font-medium text-foreground">{events.find(e => e.id === selectedEventId)?.timeIn || "08:00"}</span>
+                    <span className="font-medium text-foreground">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeIn || "08:00")}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                     <span className="text-muted-foreground">Time Out:</span>
-                    <span className="font-medium text-foreground">{events.find(e => e.id === selectedEventId)?.timeOut || "17:00"}</span>
+                    <span className="font-medium text-foreground">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeOut || "17:00")}</span>
                   </div>
                 </div>
               </div>
@@ -752,21 +989,34 @@ export default function QRScanner() {
               <label className="block text-sm font-medium text-foreground mb-2">Scan Mode</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => setScanMode("time-in")}
+                  onClick={() => {
+                    if (isTimeInAvailable()) {
+                      setScanMode("time-in")
+                      setScanError(null)
+                    }
+                  }}
+                  disabled={!isTimeInAvailable()}
                   className={`py-3 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
-                    scanMode === "time-in"
-                      ? "bg-green-500 text-white shadow-lg shadow-green-500/25"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    !isTimeInAvailable()
+                      ? "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
+                      : scanMode === "time-in"
+                        ? "bg-green-500 text-white shadow-lg shadow-green-500/25"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
                   <Clock className="w-4 h-4" />
                   Time In
                 </button>
                 <button
-                  onClick={() => isTimeOutAvailable() && setScanMode("time-out")}
-                  disabled={!isTimeOutAvailable()}
+                  onClick={() => {
+                    if (isTimeOutAvailable() && getTimeOutGraceInfo()?.status !== "grace-ended") {
+                      setScanMode("time-out")
+                      setScanError(null)
+                    }
+                  }}
+                  disabled={!isTimeOutAvailable() || getTimeOutGraceInfo()?.status === "grace-ended"}
                   className={`py-3 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
-                    !isTimeOutAvailable()
+                    !isTimeOutAvailable() || getTimeOutGraceInfo()?.status === "grace-ended"
                       ? "bg-muted/50 text-muted-foreground/50 cursor-not-allowed"
                       : scanMode === "time-out"
                         ? "bg-orange-500 text-white shadow-lg shadow-orange-500/25"
@@ -777,68 +1027,14 @@ export default function QRScanner() {
                   Time Out
                 </button>
               </div>
-              
-              {/* Time Out Availability Notice */}
-              {selectedEventId && !isTimeOutAvailable() && (
-                <div className="mt-3 bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 text-sm">
-                  <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
-                    <Clock className="w-4 h-4 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Time Out not yet available</p>
-                      <p className="text-xs mt-0.5">
-                        Available at {events.find(e => e.id === selectedEventId)?.timeOut} 
-                        {getTimeUntilTimeOut() && (
-                          <span className="ml-1 font-mono">({getTimeUntilTimeOut()} remaining)</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Time Out Active Notice */}
-              {selectedEventId && isTimeOutAvailable() && scanMode === "time-out" && (
-                <div className="mt-3 bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                    <p className="font-medium">Time Out scanning is now active!</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Scan Summary Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-            <div className="stat-card p-3 sm:p-4">
-              <p className="stat-label text-xs sm:text-sm">Time In</p>
-              <p className="stat-value text-lg sm:text-2xl text-green-600 dark:text-green-400">
-                {scanHistory.filter((s) => s.scanType === "time-in" && s.status === "approved").length}
-              </p>
-            </div>
-            <div className="stat-card p-3 sm:p-4">
-              <p className="stat-label text-xs sm:text-sm">Time Out</p>
-              <p className="stat-value text-lg sm:text-2xl text-orange-600 dark:text-orange-400">
-                {scanHistory.filter((s) => s.scanType === "time-out" && s.status === "approved").length}
-              </p>
-            </div>
-            <div className="stat-card p-3 sm:p-4">
-              <p className="stat-label text-xs sm:text-sm">Total Scans</p>
-              <p className="stat-value text-lg sm:text-2xl">{scanHistory.length}</p>
-            </div>
-            <div className="stat-card p-3 sm:p-4">
-              <p className="stat-label text-xs sm:text-sm">Rejected</p>
-              <p className="stat-value text-lg sm:text-2xl text-red-600 dark:text-red-400">
-                {scanHistory.filter((s) => s.status === "rejected").length}
-              </p>
             </div>
           </div>
         </div>
 
         {/* Scan Status Panel */}
-        <div className="space-y-4">
+        <div className="lg:sticky lg:top-6 space-y-4 self-start">
           {scannedData ? (
-            <div className={`bg-card rounded-lg border-2 p-4 sm:p-6 space-y-3 sm:space-y-4 lg:sticky lg:top-6 ${
+            <div className={`bg-card rounded-lg border-2 p-4 sm:p-6 space-y-3 sm:space-y-4 ${
               scannedData.scanType === "time-in" ? "border-green-500" : "border-orange-500"
             }`}>
               <div className="flex items-center justify-between">
@@ -933,7 +1129,7 @@ export default function QRScanner() {
               )}
             </div>
           ) : (
-            <div className="bg-card rounded-lg border border-dashed border-border p-4 sm:p-6 text-center space-y-2 sm:space-y-3 lg:sticky lg:top-6">
+            <div className="bg-card rounded-lg border border-dashed border-border p-4 sm:p-6 text-center space-y-2 sm:space-y-3">
               <QrCode className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto" />
               <div>
                 <p className="font-semibold text-foreground">Ready to Scan</p>
@@ -948,17 +1144,249 @@ export default function QRScanner() {
               </div>
             </div>
           )}
+
+          {/* Scan Summary Stats */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-card rounded-lg border border-border p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Time In</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                {scanHistory.filter((s) => s.scanType === "time-in" && s.status === "approved").length}
+              </p>
+            </div>
+            <div className="bg-card rounded-lg border border-border p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Time Out</p>
+              <p className="text-xl sm:text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">
+                {scanHistory.filter((s) => s.scanType === "time-out" && s.status === "approved").length}
+              </p>
+            </div>
+            <div className="bg-card rounded-lg border border-border p-3 sm:p-4 text-center">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Total</p>
+              <p className="text-xl sm:text-2xl font-bold text-foreground mt-1">{scanHistory.length}</p>
+            </div>
+          </div>
+
+          {/* Time Out Availability Notice */}
+          {selectedEventId && !isTimeOutAvailable() && (
+            <div className="bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-2 border-orange-500/30 rounded-xl p-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-orange-500/20 rounded-lg">
+                  <Clock className="w-5 h-5 text-orange-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-orange-600 dark:text-orange-400">Time Out not yet available</p>
+                  <p className="text-sm text-orange-600/80 dark:text-orange-400/80 mt-1">
+                    Available at <span className="font-bold">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeOut || "")}</span>
+                  </p>
+                  {getTimeUntilTimeOut() && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-orange-600/70 dark:text-orange-400/70">Countdown:</span>
+                      <span className="font-mono text-lg font-bold text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded">
+                        {getTimeUntilTimeOut()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Late Countdown Timer - Only show during Time In mode */}
+          {selectedEventId && scanMode === "time-in" && isTimeInAvailable() && getLateCountdownInfo() && (
+            <div className={`rounded-xl p-4 border-2 shadow-lg ${
+              getLateCountdownInfo()?.status === "before-start"
+                ? "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/30"
+                : getLateCountdownInfo()?.status === "on-time"
+                  ? "bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30"
+                  : "bg-gradient-to-r from-red-500/10 to-rose-500/10 border-red-500/30"
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${
+                  getLateCountdownInfo()?.status === "before-start"
+                    ? "bg-blue-500/20"
+                    : getLateCountdownInfo()?.status === "on-time"
+                      ? "bg-green-500/20"
+                      : "bg-red-500/20"
+                }`}>
+                  <AlertCircle className={`w-5 h-5 ${
+                    getLateCountdownInfo()?.status === "before-start"
+                      ? "text-blue-500"
+                      : getLateCountdownInfo()?.status === "on-time"
+                        ? "text-green-500"
+                        : "text-red-500"
+                  }`} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className={`font-semibold ${
+                      getLateCountdownInfo()?.status === "before-start"
+                        ? "text-blue-600 dark:text-blue-400"
+                        : getLateCountdownInfo()?.status === "on-time"
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-red-600 dark:text-red-400"
+                    }`}>
+                      {getLateCountdownInfo()?.status === "before-start" && "Event Starting Soon"}
+                      {getLateCountdownInfo()?.status === "on-time" && "Grace Period Active"}
+                      {getLateCountdownInfo()?.status === "late" && "Late Period"}
+                    </p>
+                    {getLateCountdownInfo()?.countdown && (
+                      <span className={`font-mono text-xl font-bold px-3 py-1 rounded-lg ${
+                        getLateCountdownInfo()?.status === "on-time"
+                          ? "text-green-500 bg-green-500/10"
+                          : "text-blue-500 bg-blue-500/10"
+                      }`}>
+                        {getLateCountdownInfo()?.countdown}
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-sm mt-1 ${
+                    getLateCountdownInfo()?.status === "before-start"
+                      ? "text-blue-600/80 dark:text-blue-400/80"
+                      : getLateCountdownInfo()?.status === "on-time"
+                        ? "text-green-600/80 dark:text-green-400/80"
+                        : "text-red-600/80 dark:text-red-400/80"
+                  }`}>
+                    {getLateCountdownInfo()?.status === "before-start" && getLateCountdownInfo()?.message}
+                    {getLateCountdownInfo()?.status === "on-time" && (
+                      <>Students arriving now will be marked <span className="font-bold bg-green-500/20 px-1 rounded">ON TIME</span></>
+                    )}
+                    {getLateCountdownInfo()?.status === "late" && (
+                      <>Students arriving now will be marked <span className="font-bold bg-red-500/20 px-1 rounded">LATE</span> ({getLateCountdownInfo()?.message})</>
+                    )}
+                  </p>
+                </div>
+              </div>
+              {/* Progress bar for grace period */}
+              {getLateCountdownInfo()?.status === "on-time" && (
+                <div className="mt-3 h-2 bg-green-200 dark:bg-green-900/50 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-1000 ease-linear rounded-full"
+                    style={{ 
+                      width: `${Math.max(0, 100 - ((getLateCountdownInfo()?.minutesSinceStart || 0) / LATE_THRESHOLD_MINUTES) * 100)}%` 
+                    }}
+                  />
+                </div>
+              )}
+              {/* Progress bar for late period */}
+              {getLateCountdownInfo()?.status === "late" && (
+                <div className="mt-3 h-2 bg-red-200 dark:bg-red-900/50 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-red-400 to-red-500 w-full rounded-full animate-pulse" />
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Time Out Active Notice with Grace Period Countdown */}
+          {selectedEventId && isTimeOutAvailable() && (
+            <div className={`border-2 rounded-xl p-4 shadow-lg ${
+              getTimeOutGraceInfo()?.status === "grace-active"
+                ? "bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-orange-500/30"
+                : getTimeOutGraceInfo()?.status === "grace-ended"
+                  ? "bg-gradient-to-r from-red-500/10 to-rose-500/10 border-red-500/30"
+                  : "bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30"
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg ${
+                  getTimeOutGraceInfo()?.status === "grace-active"
+                    ? "bg-orange-500/20"
+                    : getTimeOutGraceInfo()?.status === "grace-ended"
+                      ? "bg-red-500/20"
+                      : "bg-green-500/20"
+                }`}>
+                  {getTimeOutGraceInfo()?.status === "grace-active" ? (
+                    <Clock className="w-5 h-5 text-orange-500" />
+                  ) : getTimeOutGraceInfo()?.status === "grace-ended" ? (
+                    <AlertCircle className="w-5 h-5 text-red-500" />
+                  ) : (
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className={`font-semibold ${
+                      getTimeOutGraceInfo()?.status === "grace-active"
+                        ? "text-orange-600 dark:text-orange-400"
+                        : getTimeOutGraceInfo()?.status === "grace-ended"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-green-600 dark:text-green-400"
+                    }`}>
+                      {getTimeOutGraceInfo()?.status === "grace-active" && "Time Out Available"}
+                      {getTimeOutGraceInfo()?.status === "grace-ended" && "Time Out Closed"}
+                      {!getTimeOutGraceInfo() && "Time Out Active"}
+                    </p>
+                    {getTimeOutGraceInfo()?.countdown && (
+                      <span className="font-mono text-xl font-bold px-3 py-1 rounded-lg text-orange-500 bg-orange-500/10">
+                        {getTimeOutGraceInfo()?.countdown}
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-sm mt-1 ${
+                    getTimeOutGraceInfo()?.status === "grace-active"
+                      ? "text-orange-600/80 dark:text-orange-400/80"
+                      : getTimeOutGraceInfo()?.status === "grace-ended"
+                        ? "text-red-600/80 dark:text-red-400/80"
+                        : "text-green-600/80 dark:text-green-400/80"
+                  }`}>
+                    {getTimeOutGraceInfo()?.status === "grace-active" && (
+                      <>Students can now Time Out within <span className="font-bold bg-orange-500/20 px-1 rounded">{getTimeOutGraceInfo()?.gracePeriod} min</span> window</>
+                    )}
+                    {getTimeOutGraceInfo()?.status === "grace-ended" && (
+                      <>Time Out window closed. Event will be automatically closed.</>
+                    )}
+                    {!getTimeOutGraceInfo() && (
+                      <>Time In period has ended. Scanning for <span className="font-bold">Time Out</span> only.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+              {/* Progress bar for grace period */}
+              {getTimeOutGraceInfo()?.status === "grace-active" && getTimeOutGraceInfo()?.gracePeriod && (
+                <div className="mt-3 h-2 bg-orange-200 dark:bg-orange-900/50 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-1000 ease-linear rounded-full"
+                    style={{ 
+                      width: `${Math.max(0, (getTimeOutGraceInfo()?.timeRemaining || 0) / (getTimeOutGraceInfo()!.gracePeriod * 60 * 1000) * 100)}%` 
+                    }}
+                  />
+                </div>
+              )}
+              {/* Alert for grace ending */}
+              {getTimeOutGraceInfo()?.status === "grace-ended" && (
+                <div className="mt-3 h-2 bg-red-200 dark:bg-red-900/50 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-red-400 to-red-500 w-full rounded-full animate-pulse" />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Scan History */}
       <div className="bg-card rounded-lg border border-border overflow-hidden">
-        <div className="bg-muted p-3 sm:p-4 border-b border-border">
+        <div className="bg-muted p-3 sm:p-4 border-b border-border flex items-center justify-between">
           <h3 className="font-semibold text-foreground text-sm sm:text-base">Today's Scan History</h3>
+          <div className="flex items-center gap-2">
+            {scanHistory.length > 0 && (
+              <>
+                <span className="text-xs text-muted-foreground">{scanHistory.length} records</span>
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to clear all scan history?')) {
+                      setScanHistory([])
+                      localStorage.removeItem(getTodayKey())
+                    }
+                  }}
+                  className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors"
+                  title="Clear all scan history"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {scanHistory.length > 0 ? (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
             {scanHistory.map((scan) => (
               <div key={scan.id} className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-0 hover:bg-muted/50 transition-colors">
                 <div className="flex items-start gap-2 sm:gap-3 flex-1">

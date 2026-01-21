@@ -34,8 +34,18 @@ export default function ScanHistory() {
   // Fetch attendance history
   useEffect(() => {
     const fetchHistory = async () => {
-      const user = getCurrentUser()
+      // Wait a bit for localStorage to be available on hydration
+      let retries = 3
+      let user = getCurrentUser()
+      
+      while (!user?.id && retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        user = getCurrentUser()
+        retries--
+      }
+      
       if (!user?.id) {
+        console.log("No user found after retries")
         setIsLoading(false)
         return
       }

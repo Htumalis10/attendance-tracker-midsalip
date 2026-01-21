@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22c55e"/>
+      <stop offset="100%" style="stop-color:#16a34a"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  
+  <!-- QR Code Pattern -->
+  <g fill="white" transform="translate(72, 72)">
+    <!-- Top-left corner finder -->
+    <rect x="0" y="0" width="88" height="88" rx="12"/>
+    <rect x="12" y="12" width="64" height="64" fill="#1d4ed8" rx="8"/>
+    <rect x="28" y="28" width="32" height="32" fill="white" rx="4"/>
+    
+    <!-- Top-right corner finder -->
+    <rect x="280" y="0" width="88" height="88" rx="12"/>
+    <rect x="292" y="12" width="64" height="64" fill="#1d4ed8" rx="8"/>
+    <rect x="308" y="28" width="32" height="32" fill="white" rx="4"/>
+    
+    <!-- Bottom-left corner finder -->
+    <rect x="0" y="280" width="88" height="88" rx="12"/>
+    <rect x="12" y="292" width="64" height="64" fill="#1d4ed8" rx="8"/>
+    <rect x="28" y="308" width="32" height="32" fill="white" rx="4"/>
+    
+    <!-- QR data dots - top -->
+    <rect x="104" y="16" width="20" height="20" rx="4"/>
+    <rect x="136" y="48" width="20" height="20" rx="4"/>
+    <rect x="168" y="16" width="20" height="20" rx="4"/>
+    <rect x="200" y="48" width="20" height="20" rx="4"/>
+    <rect x="232" y="16" width="20" height="20" rx="4"/>
+    
+    <!-- QR data dots - left -->
+    <rect x="16" y="104" width="20" height="20" rx="4"/>
+    <rect x="48" y="136" width="20" height="20" rx="4"/>
+    <rect x="16" y="168" width="20" height="20" rx="4"/>
+    <rect x="48" y="200" width="20" height="20" rx="4"/>
+    <rect x="16" y="232" width="20" height="20" rx="4"/>
+    
+    <!-- QR data dots - bottom -->
+    <rect x="104" y="332" width="20" height="20" rx="4"/>
+    <rect x="136" y="300" width="20" height="20" rx="4"/>
+    <rect x="168" y="332" width="20" height="20" rx="4"/>
+  </g>
+  
+  <!-- Green checkmark circle in bottom-right -->
+  <circle cx="380" cy="380" r="100" fill="url(#checkGradient)" stroke="white" stroke-width="8"/>
+  <!-- Checkmark -->
+  <path d="M330 380 L360 410 L430 340" fill="none" stroke="white" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

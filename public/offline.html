@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - ZDSPGC SmartCode</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .container {
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .icon {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 30px;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 40px rgba(59, 130, 246, 0.3);
+    }
+    
+    .icon svg {
+      width: 60px;
+      height: 60px;
+      fill: none;
+      stroke: white;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    p {
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+    
+    .status {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 30px;
+    }
+    
+    .status-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    
+    .status-item:not(:last-child) {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .status-label {
+      color: #64748b;
+      font-size: 14px;
+    }
+    
+    .status-value {
+      color: #f8fafc;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    .status-value.offline {
+      color: #f87171;
+    }
+    
+    .status-value.pending {
+      color: #fbbf24;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      margin-top: 12px;
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .footer {
+      margin-top: 40px;
+      color: #64748b;
+      font-size: 12px;
+    }
+    
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">
+      <svg viewBox="0 0 24 24">
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+        <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+        <line x1="12" y1="20" x2="12.01" y2="20"></line>
+      </svg>
+    </div>
+    
+    <h1>You're Offline</h1>
+    <p>Don't worry! Your attendance data is safely stored and will automatically sync when you're back online.</p>
+    
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">Connection Status</span>
+        <span class="status-value offline pulse" id="connection-status">Offline</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Pending Records</span>
+        <span class="status-value pending" id="pending-count">0</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Last Sync</span>
+        <span class="status-value" id="last-sync">Never</span>
+      </div>
+    </div>
+    
+    <button class="btn btn-primary" onclick="tryReconnect()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6"></path>
+        <path d="M1 20v-6h6"></path>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+      Try to Reconnect
+    </button>
+    
+    <button class="btn btn-secondary" onclick="goBack()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"></path>
+      </svg>
+      Go Back
+    </button>
+    
+    <div class="footer">
+      <p>ZDSPGC SmartCode v1.0</p>
+    </div>
+  </div>
+  
+  <script>
+    // Update status from localStorage
+    function updateStatus() {
+      try {
+        const syncStatus = localStorage.getItem('smartcode_sync_status');
+        const offlineQueue = localStorage.getItem('smartcode_offline_queue');
+        
+        if (syncStatus) {
+          const status = JSON.parse(syncStatus);
+          document.getElementById('last-sync').textContent = 
+            status.lastSync ? new Date(status.lastSync).toLocaleString() : 'Never';
+        }
+        
+        if (offlineQueue) {
+          const queue = JSON.parse(offlineQueue);
+          const pending = queue.filter(r => !r.synced).length;
+          document.getElementById('pending-count').textContent = pending;
+        }
+        
+        document.getElementById('connection-status').textContent = 
+          navigator.onLine ? 'Online' : 'Offline';
+        document.getElementById('connection-status').className = 
+          'status-value ' + (navigator.onLine ? '' : 'offline pulse');
+      } catch (e) {
+        console.error('Error updating status:', e);
+      }
+    }
+    
+    function tryReconnect() {
+      if (navigator.onLine) {
+        window.location.reload();
+      } else {
+        alert('Still offline. Please check your internet connection.');
+      }
+    }
+    
+    function goBack() {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/';
+      }
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      updateStatus();
+      setTimeout(() => window.location.reload(), 1000);
+    });
+    
+    window.addEventListener('offline', updateStatus);
+    
+    // Initial update
+    updateStatus();
+    
+    // Periodic update
+    setInterval(updateStatus, 5000);
+  </script>
+</body>
+</html>

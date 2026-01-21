@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { LayoutDashboard, User, QrCode, Award, LogOut, Menu, Bell, Calendar, Clock, MapPin, Check, CheckCheck } from "lucide-react"
 import { useState, useEffect, useCallback } from "react"
 import { logout, getCurrentUser } from "@/lib/auth"
+import { formatTimeDisplay } from "@/lib/time-utils"
 import {
   Popover,
   PopoverContent,
@@ -117,8 +118,8 @@ export default function StudentLayout({
     if (currentUser?.id) {
       // Fetch immediately when user is available
       fetchNotifications()
-      // Poll every 30 seconds for new notifications (real-time feel)
-      const interval = setInterval(fetchNotifications, 30 * 1000)
+      // Poll every 10 seconds for new notifications (real-time feel for certificates)
+      const interval = setInterval(fetchNotifications, 10 * 1000)
       return () => clearInterval(interval)
     }
   }, [currentUser?.id, fetchNotifications])
@@ -339,7 +340,7 @@ export default function StudentLayout({
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                                 <Clock className="w-3 h-3" />
-                                <span>{event.timeIn}</span>
+                                <span>{formatTimeDisplay(event.timeIn)}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                                 <MapPin className="w-3 h-3" />

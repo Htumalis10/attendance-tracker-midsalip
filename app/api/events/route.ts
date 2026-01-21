@@ -2,42 +2,89 @@ import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { NotificationType } from "@prisma/client"
 
+// Calculate grace period based on event duration
+// Short events (5-10 mins): 10 minutes grace
+// Medium events (20-30 mins): 20 minutes grace
+// Long events (1+ hour): 60 minutes grace
+function calculateGracePeriod(timeIn: string, timeOut: string): number {
+  const [inHour, inMin] = timeIn.split(":").map(Number)
+  const [outHour, outMin] = timeOut.split(":").map(Number)
+  
+  // Calculate duration in minutes
+  const startMinutes = inHour * 60 + inMin
+  const endMinutes = outHour * 60 + outMin
+  const durationMinutes = endMinutes - startMinutes
+  
+  // Determine grace period based on duration
+  if (durationMinutes <= 10) {
+    return 10 // 10 minutes grace for 5-10 min events
+  } else if (durationMinutes <= 30) {
+    return 20 // 20 minutes grace for 20-30 min events
+  } else if (durationMinutes <= 60) {
+    return 30 // 30 minutes grace for up to 1 hour events
+  } else {
+    return 60 // 1 hour grace for events longer than 1 hour
+  }
+}
+
 // Helper function to determine the correct event status based on date/time
 function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string }): string {
   const now = new Date()
   const eventDate = new Date(event.date)
   
-  // Set event date to start of day for comparison
-  const eventDateStart = new Date(eventDate)
-  eventDateStart.setHours(0, 0, 0, 0)
+  // Extract year, month, day from event date (in UTC since MySQL stores as UTC)
+  const eventYear = eventDate.getUTCFullYear()
+  const eventMonth = eventDate.getUTCMonth()
+  const eventDay = eventDate.getUTCDate()
   
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
+  // Get today's date components in local time
+  const todayYear = now.getFullYear()
+  const todayMonth = now.getMonth()
+  const todayDay = now.getDate()
   
-  // Parse timeIn and timeOut
+  // Parse timeIn and timeOut (supports both 24-hour "HH:mm" format)
   const [timeInHour, timeInMin] = event.timeIn.split(":").map(Number)
   const [timeOutHour, timeOutMin] = event.timeOut.split(":").map(Number)
   
-  // Create full datetime for event start and end
-  const eventStart = new Date(eventDate)
-  eventStart.setHours(timeInHour, timeInMin, 0, 0)
+  // Create full datetime for event start and end in LOCAL time
+  const eventStart = new Date(eventYear, eventMonth, eventDay, timeInHour, timeInMin, 0, 0)
+  const eventEnd = new Date(eventYear, eventMonth, eventDay, timeOutHour, timeOutMin, 0, 0)
   
-  const eventEnd = new Date(eventDate)
-  eventEnd.setHours(timeOutHour, timeOutMin, 0, 0)
+  // Calculate dynamic grace period based on event duration
+  const gracePeriodMinutes = calculateGracePeriod(event.timeIn, event.timeOut)
+  
+  // Add grace period for time-out
+  const eventEndWithGrace = new Date(eventEnd.getTime() + gracePeriodMinutes * 60 * 1000)
+  
+  // Compare dates (year, month, day only)
+  const isEventInPast = 
+    eventYear < todayYear || 
+    (eventYear === todayYear && eventMonth < todayMonth) ||
+    (eventYear === todayYear && eventMonth === todayMonth && eventDay < todayDay)
+  
+  const isEventToday = 
+    eventYear === todayYear && 
+    eventMonth === todayMonth && 
+    eventDay === todayDay
+  
+  const isEventInFuture = 
+    eventYear > todayYear || 
+    (eventYear === todayYear && eventMonth > todayMonth) ||
+    (eventYear === todayYear && eventMonth === todayMonth && eventDay > todayDay)
   
   // If event date is in the past (before today), mark as CLOSED
-  if (eventDateStart < todayStart) {
+  if (isEventInPast) {
     return "CLOSED"
   }
   
   // If event is today
-  if (eventDateStart.getTime() === todayStart.getTime()) {
-    // If current time is after event end time, mark as CLOSED
-    if (now >= eventEnd) {
+  if (isEventToday) {
+    // If current time is after event end time + grace period, mark as CLOSED
+    if (now >= eventEndWithGrace) {
       return "CLOSED"
     }
-    // If current time is within event time window, mark as ACTIVE
-    if (now >= eventStart && now < eventEnd) {
+    // If current time is within event time window (including grace period), mark as ACTIVE
+    if (now >= eventStart && now < eventEndWithGrace) {
       return "ACTIVE"
     }
     // If event hasn't started yet today, keep as UPCOMING
@@ -45,6 +92,10 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   }
   
   // If event date is in the future, keep as UPCOMING
+  if (isEventInFuture) {
+    return "UPCOMING"
+  }
+  
   return "UPCOMING"
 }
 
@@ -106,25 +157,83 @@ async function autoGenerateCertificates(eventId: string, eventName: string) {
   }
 }
 
+// Mark students as ABSENT if they didn't attend the event
+async function markAbsentStudents(eventId: string, eventName: string) {
+  try {
+    // Get all active students
+    const allStudents = await prisma.user.findMany({
+      where: {
+        role: "STUDENT",
+        status: "ACTIVE"
+      },
+      select: { id: true, name: true }
+    })
+
+    // Get all students who have attendance records for this event
+    const attendedStudentIds = await prisma.attendanceRecord.findMany({
+      where: { eventId },
+      select: { userId: true }
+    })
+
+    const attendedIds = new Set(attendedStudentIds.map(r => r.userId))
+
+    // Find students who didn't attend
+    const absentStudents = allStudents.filter(student => !attendedIds.has(student.id))
+
+    let absentCount = 0
+
+    // Create ABSENT records for students who didn't scan
+    for (const student of absentStudents) {
+      try {
+        await prisma.attendanceRecord.create({
+          data: {
+            userId: student.id,
+            eventId: eventId,
+            status: "ABSENT",
+            timeIn: null,
+            timeOut: null,
+          }
+        })
+        absentCount++
+      } catch (err) {
+        // Record might already exist (shouldn't happen but just in case)
+        console.error(`Failed to create absent record for ${student.name}:`, err)
+      }
+    }
+
+    console.log(`Marked ${absentCount} students as ABSENT for event "${eventName}" (${eventId})`)
+  } catch (error) {
+    console.error("Error marking absent students:", error)
+  }
+}
+
 // Auto-update event statuses
 async function updateEventStatuses() {
   try {
+    // Check ALL events that aren't manually set - events can transition in any direction
+    // UPCOMING -> ACTIVE -> CLOSED (normal flow)
+    // CLOSED -> ACTIVE (if event was created with wrong time or time was adjusted)
     const events = await prisma.event.findMany({
       where: {
-        status: { in: ["UPCOMING", "ACTIVE"] }
+        status: { in: ["UPCOMING", "ACTIVE", "CLOSED"] }
       }
     })
     
     for (const event of events) {
       const correctStatus = getCorrectEventStatus(event)
       if (correctStatus !== event.status) {
+        const wasClosedBefore = event.status === "CLOSED"
+        
         await prisma.event.update({
           where: { id: event.id },
           data: { status: correctStatus as any }
         })
         
-        // If event just closed, auto-generate certificates
-        if (correctStatus === "CLOSED") {
+        // If event just closed (and wasn't closed before), mark absent students and auto-generate certificates
+        if (correctStatus === "CLOSED" && !wasClosedBefore) {
+          // First mark absent students
+          await markAbsentStudents(event.id, event.name)
+          // Then generate certificates for those who attended
           await autoGenerateCertificates(event.id, event.name)
         }
       }
@@ -160,7 +269,7 @@ export async function GET(request: NextRequest) {
 
     const events = await prisma.event.findMany({
       where,
-      orderBy: { date: "desc" },
+      orderBy: { createdAt: "desc" },
       include: {
         _count: {
           select: {

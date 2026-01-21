@@ -99,6 +99,7 @@ enum AttendanceStatus {
   APPROVED
   REJECTED
   PRESENT
+  LATE
   ABSENT
   INSIDE
 }
@@ -123,11 +124,15 @@ model Certificate {
 // Scanner Device model (for sync status)
 model ScannerDevice {
   id             String       @id @default(cuid())
-  deviceId       String       @unique // e.g., "SCAN-01"
-  name           String
-  location       String
+  deviceId       String       @unique // Unique device fingerprint e.g., "DEV-ABC123"
+  name           String       // Friendly name e.g., "Laptop - Windows 10/11 (Chrome)"
+  deviceType     String       @default("unknown") // mobile, tablet, laptop, desktop
+  browser        String?      // Chrome, Firefox, Safari, etc.
+  os             String?      // Windows, macOS, Android, iOS, etc.
+  location       String?      // Optional location description
   status         DeviceStatus @default(OFFLINE)
-  lastSync       DateTime?
+  lastSeen       DateTime?    // Last time device was active
+  lastSync       DateTime?    // Last successful sync
   offlineRecords Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

@@ -161,8 +161,8 @@ export async function POST(request: NextRequest) {
         if (now > eventTime) {
           lateMinutes = Math.floor((now.getTime() - eventTime.getTime()) / 60000)
           
-          // More than 15 minutes late = LATE status
-          if (lateMinutes > 15) {
+          // More than 5 minutes late = LATE status
+          if (lateMinutes > 5) {
             attendanceStatus = "LATE"
           }
         }

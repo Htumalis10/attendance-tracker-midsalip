@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Users, Calendar, Activity, Award, TrendingUp, TrendingDown, Loader2 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   LineChart,
   Line,
@@ -99,9 +100,56 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <span className="ml-3 text-muted-foreground">Loading dashboard...</span>
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+        <div>
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-72 mt-2" />
+        </div>
+        
+        {/* Skeleton Stat Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-card rounded-lg border border-border p-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-7 w-16" />
+                </div>
+                <Skeleton className="h-10 w-10 rounded-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="lg:col-span-2 bg-card rounded-lg border border-border p-4 sm:p-6">
+            <Skeleton className="h-6 w-48 mb-4" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4 sm:p-6">
+            <Skeleton className="h-6 w-40 mb-4" />
+            <Skeleton className="h-48 w-48 rounded-full mx-auto" />
+          </div>
+        </div>
+
+        {/* Skeleton Recent Events */}
+        <div className="bg-card rounded-lg border border-border">
+          <div className="p-4 border-b border-border">
+            <Skeleton className="h-6 w-32" />
+          </div>
+          <div className="divide-y divide-border">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="p-4 flex items-center justify-between">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -173,20 +221,24 @@ export default function AdminDashboard() {
               <LineChart data={weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
                 <XAxis dataKey="date" stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
-                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
+                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip
+                  cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeOpacity: 0.3 }}
                   contentStyle={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid #333",
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                     fontSize: "12px",
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                   }}
                   labelStyle={{
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
+                    fontWeight: "600",
+                    marginBottom: "4px",
                   }}
                   itemStyle={{
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -236,17 +288,18 @@ export default function AdminDashboard() {
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1a1a1a",
-                  border: "1px solid #333",
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
                   borderRadius: "8px",
                   fontSize: "12px",
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
+                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 }}
                 labelStyle={{
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
                 }}
                 itemStyle={{
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
                 }}
               />
             </PieChart>

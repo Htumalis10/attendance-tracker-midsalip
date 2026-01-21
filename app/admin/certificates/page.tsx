@@ -73,9 +73,16 @@ export default function CertificateGenerator() {
     fetchCertificates()
   }, [selectedEventId])
 
+  // Auto-generate certificates when event or criteria changes
+  useEffect(() => {
+    if (selectedEventId) {
+      handleGenerateCertificates()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEventId, selectedCriteria])
+
   const handleGenerateCertificates = async () => {
     if (!selectedEventId) {
-      toast.warning("Please select an event first")
       return
     }
 
@@ -134,43 +141,223 @@ export default function CertificateGenerator() {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Certificate of Attendance</title>
+  <title>Certificate of Attendance - ${certificate.user.name}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Cormorant+Garamond:wght@400;500;600&family=Great+Vibes&display=swap" rel="stylesheet">
   <style>
     @page { size: landscape; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: 'Times New Roman', serif; 
+      font-family: 'Cormorant Garamond', 'Times New Roman', serif; 
       text-align: center; 
-      padding: 40px;
-      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .certificate {
-      background: white;
-      border: 8px double #1a365d;
-      padding: 60px 80px;
-      max-width: 900px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    .certificate-wrapper {
+      background: linear-gradient(145deg, #1a365d 0%, #2c5282 50%, #1a365d 100%);
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 25px 80px rgba(0,0,0,0.4);
     }
-    .header { font-size: 48px; color: #1a365d; margin-bottom: 20px; }
-    .subheader { font-size: 24px; color: #4a5568; margin-bottom: 40px; }
-    .name { font-size: 36px; color: #2d3748; font-weight: bold; margin: 30px 0; }
-    .event { font-size: 24px; color: #4a5568; margin: 20px 0; }
-    .date { font-size: 18px; color: #718096; margin-top: 40px; }
-    .signature { margin-top: 60px; border-top: 2px solid #1a365d; display: inline-block; padding-top: 10px; min-width: 200px; }
+    .certificate {
+      background: linear-gradient(180deg, #fffef9 0%, #faf8f0 100%);
+      border: 3px solid #c9a227;
+      padding: 40px 60px;
+      width: 950px;
+      min-height: 650px;
+      position: relative;
+      overflow: hidden;
+    }
+    .certificate::before {
+      content: '';
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      bottom: 15px;
+      border: 2px solid #c9a227;
+      pointer-events: none;
+    }
+    .corner-ornament {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      opacity: 0.15;
+    }
+    .corner-ornament.top-left { top: 20px; left: 20px; }
+    .corner-ornament.top-right { top: 20px; right: 20px; transform: rotate(90deg); }
+    .corner-ornament.bottom-left { bottom: 20px; left: 20px; transform: rotate(-90deg); }
+    .corner-ornament.bottom-right { bottom: 20px; right: 20px; transform: rotate(180deg); }
+    .logo-container {
+      margin-bottom: 15px;
+    }
+    .logo {
+      width: 90px;
+      height: 90px;
+      object-fit: contain;
+      border-radius: 50%;
+      border: 3px solid #c9a227;
+      padding: 5px;
+      background: white;
+    }
+    .school-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 16px;
+      color: #1a365d;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+    .header {
+      font-family: 'Great Vibes', cursive;
+      font-size: 58px;
+      color: #1a365d;
+      margin: 15px 0;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    .divider {
+      width: 300px;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #c9a227, transparent);
+      margin: 15px auto;
+    }
+    .certify-text {
+      font-size: 18px;
+      color: #4a5568;
+      font-style: italic;
+      margin: 20px 0 10px;
+    }
+    .name {
+      font-family: 'Playfair Display', serif;
+      font-size: 42px;
+      color: #1a365d;
+      font-weight: 700;
+      margin: 15px 0;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      border-bottom: 3px double #c9a227;
+      display: inline-block;
+      padding-bottom: 8px;
+    }
+    .attended-text {
+      font-size: 18px;
+      color: #4a5568;
+      margin: 20px 0 10px;
+    }
+    .event {
+      font-family: 'Playfair Display', serif;
+      font-size: 28px;
+      color: #2c5282;
+      font-weight: 600;
+      margin: 10px 0;
+      font-style: italic;
+    }
+    .date {
+      font-size: 16px;
+      color: #718096;
+      margin-top: 25px;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 35px;
+      padding-top: 20px;
+    }
+    .signature-block {
+      text-align: center;
+      min-width: 200px;
+    }
+    .signature-line {
+      width: 180px;
+      border-top: 2px solid #1a365d;
+      margin: 0 auto 8px;
+    }
+    .signature-label {
+      font-size: 14px;
+      color: #4a5568;
+      font-weight: 500;
+    }
+    .certificate-id {
+      position: absolute;
+      bottom: 25px;
+      right: 30px;
+      font-size: 10px;
+      color: #a0aec0;
+      font-family: monospace;
+    }
+    .seal {
+      position: absolute;
+      bottom: 80px;
+      right: 60px;
+      width: 80px;
+      height: 80px;
+      border: 3px solid #c9a227;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+    }
+    .seal-inner {
+      width: 60px;
+      height: 60px;
+      border: 2px solid #c9a227;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 10px;
+      color: #1a365d;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
-  <div class="certificate">
-    <div class="header">Certificate of Attendance</div>
-    <div class="subheader">This is to certify that</div>
-    <div class="name">${certificate.user.name}</div>
-    <div class="subheader">has successfully attended</div>
-    <div class="event">${certificate.event.name}</div>
-    <div class="date">Issued on: ${new Date(certificate.issuedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-    <div class="signature">Authorized Signature</div>
+  <div class="certificate-wrapper">
+    <div class="certificate">
+      <svg class="corner-ornament top-left" viewBox="0 0 100 100"><path d="M0,0 L100,0 L100,20 L20,20 L20,100 L0,100 Z" fill="#c9a227"/></svg>
+      <svg class="corner-ornament top-right" viewBox="0 0 100 100"><path d="M0,0 L100,0 L100,20 L20,20 L20,100 L0,100 Z" fill="#c9a227"/></svg>
+      <svg class="corner-ornament bottom-left" viewBox="0 0 100 100"><path d="M0,0 L100,0 L100,20 L20,20 L20,100 L0,100 Z" fill="#c9a227"/></svg>
+      <svg class="corner-ornament bottom-right" viewBox="0 0 100 100"><path d="M0,0 L100,0 L100,20 L20,20 L20,100 L0,100 Z" fill="#c9a227"/></svg>
+      
+      <div class="logo-container">
+        <img src="${window.location.origin}/ZDSPGC%20LOGO.jpg" alt="School Logo" class="logo" onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MCIgaGVpZ2h0PSI5MCIgdmlld0JveD0iMCAwIDkwIDkwIj48Y2lyY2xlIGN4PSI0NSIgY3k9IjQ1IiByPSI0MCIgZmlsbD0iIzFhMzY1ZCIvPjx0ZXh0IHg9IjQ1IiB5PSI1NSIgZm9udC1mYW1pbHk9IlBsYXlmYWlyIERpc3BsYXkiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlosRC5TLlAuRy5DPC90ZXh0Pjwvc3ZnPg==';">
+        <div class="school-name">Zamboanga del Sur Provincial Government College</div>
+      </div>
+      
+      <div class="header">Certificate of Attendance</div>
+      <div class="divider"></div>
+      
+      <p class="certify-text">This is to certify that</p>
+      <div class="name">${certificate.user.name}</div>
+      <p class="attended-text">has successfully attended the event</p>
+      <div class="event">"${certificate.event.name}"</div>
+      
+      <p class="date">Issued on ${new Date(certificate.issuedAt).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      
+      <div class="footer">
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div class="signature-label">Event Coordinator</div>
+        </div>
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div class="signature-label">School Administrator</div>
+        </div>
+      </div>
+      
+      <div class="seal">
+        <div class="seal-inner">Official Seal</div>
+      </div>
+      
+      <div class="certificate-id">Certificate ID: ${certificate.id.slice(0, 8).toUpperCase()}</div>
+    </div>
   </div>
 </body>
 </html>`
@@ -228,16 +415,13 @@ export default function CertificateGenerator() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleGenerateCertificates}
-              disabled={isGenerating || !selectedEventId}
-              className="w-full action-button btn-secondary disabled:opacity-50"
-            >
-              {isGenerating ? "Generating..." : "Generate Now"}
-            </button>
-          </div>
         </div>
+        {isGenerating && (
+          <div className="flex items-center gap-2 mt-3">
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Auto-generating certificates...</span>
+          </div>
+        )}
       </div>
 
       {/* Certificates Table */}
@@ -249,7 +433,7 @@ export default function CertificateGenerator() {
           </div>
         ) : certificates.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            No certificates found. Select an event and generate certificates.
+            No certificates found. Select an event to automatically generate certificates.
           </div>
         ) : (
           <div className="overflow-x-auto">

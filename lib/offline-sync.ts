@@ -3,6 +3,17 @@
 
 const OFFLINE_QUEUE_KEY = "smartcode_offline_queue"
 const SYNC_STATUS_KEY = "smartcode_sync_status"
+const DEVICE_INFO_KEY = "smartcode_device_info"
+
+export interface DeviceInfo {
+  deviceId: string
+  deviceName: string
+  deviceType: "mobile" | "tablet" | "laptop" | "desktop" | "unknown"
+  browser: string
+  os: string
+  lastSeen: string
+  isOnline: boolean
+}
 
 export interface OfflineAttendanceRecord {
   id: string
@@ -13,10 +24,14 @@ export interface OfflineAttendanceRecord {
   eventName: string
   status: "PRESENT" | "LATE" | "PENDING"
   timeIn: string
+  timeOut?: string
   scannedAt: string
   synced: boolean
   syncAttempts: number
   lastSyncAttempt?: string
+  deviceId?: string
+  deviceName?: string
+  type?: "time-in" | "time-out"
 }
 
 export interface SyncStatus {
@@ -24,6 +39,233 @@ export interface SyncStatus {
   lastSync: string | null
   pendingRecords: number
   lastError: string | null
+  deviceInfo?: DeviceInfo
+}
+
+// Detect device type from user agent
+function detectDeviceType(): "mobile" | "tablet" | "laptop" | "desktop" | "unknown" {
+  if (typeof window === "undefined") return "unknown"
+  
+  const ua = navigator.userAgent.toLowerCase()
+  
+  // Check for mobile devices
+  if (/android.*mobile|iphone|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua)) {
+    return "mobile"
+  }
+  
+  // Check for tablets
+  if (/ipad|android(?!.*mobile)|tablet/i.test(ua)) {
+    return "tablet"
+  }
+  
+  // Check for touch-enabled laptops/desktops
+  const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0
+  
+  // Check screen size for laptop vs desktop
+  const screenWidth = window.screen.width
+  const screenHeight = window.screen.height
+  
+  // Laptops typically have smaller screens
+  if (screenWidth <= 1920 && screenHeight <= 1080) {
+    return "laptop"
+  }
+  
+  return "desktop"
+}
+
+// Detect browser name
+function detectBrowser(): string {
+  if (typeof window === "undefined") return "unknown"
+  
+  const ua = navigator.userAgent
+  
+  if (ua.includes("Firefox")) return "Firefox"
+  if (ua.includes("SamsungBrowser")) return "Samsung Browser"
+  if (ua.includes("Opera") || ua.includes("OPR")) return "Opera"
+  if (ua.includes("Edg")) return "Edge"
+  if (ua.includes("Chrome")) return "Chrome"
+  if (ua.includes("Safari")) return "Safari"
+  
+  return "Unknown Browser"
+}
+
+// Detect operating system
+function detectOS(): string {
+  if (typeof window === "undefined") return "unknown"
+  
+  const ua = navigator.userAgent
+  
+  if (ua.includes("Windows NT 10")) return "Windows 10/11"
+  if (ua.includes("Windows NT 6.3")) return "Windows 8.1"
+  if (ua.includes("Windows NT 6.2")) return "Windows 8"
+  if (ua.includes("Windows NT 6.1")) return "Windows 7"
+  if (ua.includes("Windows")) return "Windows"
+  if (ua.includes("Mac OS X")) return "macOS"
+  if (ua.includes("Android")) {
+    const match = ua.match(/Android (\d+\.?\d*)/)
+    return match ? `Android ${match[1]}` : "Android"
+  }
+  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS"
+  if (ua.includes("Linux")) return "Linux"
+  
+  return "Unknown OS"
+}
+
+// Generate a unique device ID
+function generateDeviceId(): string {
+  // Try to get a stable identifier
+  const canvas = document.createElement("canvas")
+  const ctx = canvas.getContext("2d")
+  let fingerprint = ""
+  
+  if (ctx) {
+    ctx.textBaseline = "top"
+    ctx.font = "14px Arial"
+    ctx.fillText("SmartCode", 2, 2)
+    fingerprint = canvas.toDataURL().slice(-50)
+  }
+  
+  // Combine with other factors
+  const screenInfo = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const language = navigator.language
+  
+  // Create a hash from the combined data
+  const combined = `${fingerprint}-${screenInfo}-${timezone}-${language}-${navigator.userAgent.slice(0, 50)}`
+  let hash = 0
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  
+  return `DEV-${Math.abs(hash).toString(36).toUpperCase()}`
+}
+
+// Generate friendly device name
+function generateDeviceName(): string {
+  const deviceType = detectDeviceType()
+  const os = detectOS()
+  const browser = detectBrowser()
+  
+  const typeNames: Record<string, string> = {
+    mobile: "📱 Mobile",
+    tablet: "📱 Tablet", 
+    laptop: "💻 Laptop",
+    desktop: "🖥️ Desktop",
+    unknown: "📟 Device"
+  }
+  
+  return `${typeNames[deviceType]} - ${os} (${browser})`
+}
+
+// Get or create device info
+export function getDeviceInfo(): DeviceInfo {
+  if (typeof window === "undefined") {
+    return {
+      deviceId: "server",
+      deviceName: "Server",
+      deviceType: "unknown",
+      browser: "unknown",
+      os: "unknown",
+      lastSeen: new Date().toISOString(),
+      isOnline: true,
+    }
+  }
+  
+  const stored = localStorage.getItem(DEVICE_INFO_KEY)
+  
+  if (stored) {
+    try {
+      const info = JSON.parse(stored) as DeviceInfo
+      // Update lastSeen and online status
+      info.lastSeen = new Date().toISOString()
+      info.isOnline = navigator.onLine
+      localStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info))
+      return info
+    } catch (e) {
+      console.error("Failed to parse device info:", e)
+    }
+  }
+  
+  // Generate new device info
+  const deviceInfo: DeviceInfo = {
+    deviceId: generateDeviceId(),
+    deviceName: generateDeviceName(),
+    deviceType: detectDeviceType(),
+    browser: detectBrowser(),
+    os: detectOS(),
+    lastSeen: new Date().toISOString(),
+    isOnline: navigator.onLine,
+  }
+  
+  localStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(deviceInfo))
+  return deviceInfo
+}
+
+// Update device online status
+export function updateDeviceStatus(isOnline: boolean): void {
+  if (typeof window === "undefined") return
+  
+  const info = getDeviceInfo()
+  info.isOnline = isOnline
+  info.lastSeen = new Date().toISOString()
+  localStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info))
+}
+
+// Register device with the server
+export async function registerDeviceWithServer(): Promise<boolean> {
+  if (typeof window === "undefined") return false
+  if (!navigator.onLine) return false
+  
+  try {
+    const deviceInfo = getDeviceInfo()
+    const pendingCount = getPendingRecords().length
+    
+    const response = await fetch("/api/scanners", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceId: deviceInfo.deviceId,
+        name: deviceInfo.deviceName,
+        deviceType: deviceInfo.deviceType,
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+        offlineRecords: pendingCount,
+      }),
+    })
+    
+    return response.ok
+  } catch (error) {
+    console.error("Failed to register device with server:", error)
+    return false
+  }
+}
+
+// Send heartbeat to server to maintain online status
+export async function sendHeartbeat(): Promise<boolean> {
+  if (typeof window === "undefined") return false
+  if (!navigator.onLine) return false
+  
+  try {
+    const deviceInfo = getDeviceInfo()
+    const pendingCount = getPendingRecords().length
+    
+    const response = await fetch("/api/scanners", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceId: deviceInfo.deviceId,
+        status: "ONLINE",
+        offlineRecords: pendingCount,
+      }),
+    })
+    
+    return response.ok
+  } catch (error) {
+    console.error("Failed to send heartbeat:", error)
+    return false
+  }
 }
 
 // Get current sync status
@@ -34,10 +276,11 @@ export function getSyncStatus(): SyncStatus {
   
   const stored = localStorage.getItem(SYNC_STATUS_KEY)
   const pendingRecords = getOfflineQueue().filter(r => !r.synced).length
+  const deviceInfo = getDeviceInfo()
   
   if (stored) {
     const status = JSON.parse(stored)
-    return { ...status, isOnline: navigator.onLine, pendingRecords }
+    return { ...status, isOnline: navigator.onLine, pendingRecords, deviceInfo }
   }
   
   return {
@@ -45,6 +288,7 @@ export function getSyncStatus(): SyncStatus {
     lastSync: null,
     pendingRecords,
     lastError: null,
+    deviceInfo,
   }
 }
 
@@ -80,8 +324,9 @@ function saveOfflineQueue(queue: OfflineAttendanceRecord[]): void {
 }
 
 // Add record to offline queue
-export function addToOfflineQueue(record: Omit<OfflineAttendanceRecord, "id" | "synced" | "syncAttempts" | "scannedAt">): OfflineAttendanceRecord {
+export function addToOfflineQueue(record: Omit<OfflineAttendanceRecord, "id" | "synced" | "syncAttempts" | "scannedAt" | "deviceId" | "deviceName">): OfflineAttendanceRecord {
   const queue = getOfflineQueue()
+  const deviceInfo = getDeviceInfo()
   
   // Check for duplicate (same user, same event)
   const existing = queue.find(r => r.userId === record.userId && r.eventId === record.eventId)
@@ -95,6 +340,8 @@ export function addToOfflineQueue(record: Omit<OfflineAttendanceRecord, "id" | "
     scannedAt: new Date().toISOString(),
     synced: false,
     syncAttempts: 0,
+    deviceId: deviceInfo.deviceId,
+    deviceName: deviceInfo.deviceName,
   }
   
   queue.push(newRecord)
@@ -220,9 +467,16 @@ export function isOnline(): boolean {
 export function setupSyncListeners(onStatusChange?: (online: boolean) => void): () => void {
   if (typeof window === "undefined") return () => {}
   
+  // Register device on initial setup
+  registerDeviceWithServer()
+  
   const handleOnline = async () => {
     updateSyncStatus({ isOnline: true })
+    updateDeviceStatus(true)
     onStatusChange?.(true)
+    
+    // Register device when coming back online
+    await registerDeviceWithServer()
     
     // Auto-sync when coming back online
     const pending = getPendingRecords()
@@ -234,16 +488,26 @@ export function setupSyncListeners(onStatusChange?: (online: boolean) => void): 
   
   const handleOffline = () => {
     updateSyncStatus({ isOnline: false })
+    updateDeviceStatus(false)
     onStatusChange?.(false)
   }
   
   window.addEventListener("online", handleOnline)
   window.addEventListener("offline", handleOffline)
   
+  // Send heartbeat to server periodically to maintain online status
+  const heartbeatInterval = setInterval(() => {
+    if (navigator.onLine) {
+      sendHeartbeat()
+    }
+    updateDeviceStatus(navigator.onLine)
+  }, 30000) // Every 30 seconds
+  
   // Return cleanup function
   return () => {
     window.removeEventListener("online", handleOnline)
     window.removeEventListener("offline", handleOffline)
+    clearInterval(heartbeatInterval)
   }
 }
 

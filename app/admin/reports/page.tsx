@@ -82,9 +82,21 @@ export default function Reports() {
     fetchEvents()
   }, [])
 
+  // Auto-generate report when filters change
+  useEffect(() => {
+    if (selectedEventId) {
+      handleGenerateReport()
+    } else {
+      // Reset report when no event selected
+      setGeneratedReport(false)
+      setReportData([])
+      setAttendanceRecords([])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEventId, selectedCourse, selectedYear])
+
   const handleGenerateReport = async () => {
     if (!selectedEventId) {
-      toast.warning("Please select an event to generate report")
       return
     }
 
@@ -280,8 +292,8 @@ export default function Reports() {
 
       {/* Report Filters */}
       <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
-        <h2 className="font-semibold text-foreground mb-3 sm:mb-4">Generate Report</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+        <h2 className="font-semibold text-foreground mb-3 sm:mb-4">Report Filters</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">Event</label>
             <DropdownMenu>
@@ -337,19 +349,15 @@ export default function Reports() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleGenerateReport}
-              disabled={isGenerating}
-              className="w-full action-button btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4" />
-              {isGenerating ? "Generating..." : "Generate"}
-            </button>
-          </div>
         </div>
-        {generatedReport && (
-          <p className="text-sm text-green-600 dark:text-green-400">✓ Report generated successfully ({attendanceRecords.length} records)</p>
+        {isGenerating && (
+          <div className="flex items-center gap-2 mt-3">
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">Generating report...</span>
+          </div>
+        )}
+        {generatedReport && !isGenerating && (
+          <p className="text-sm text-green-600 dark:text-green-400 mt-3">✓ Report generated automatically ({attendanceRecords.length} records)</p>
         )}
       </div>
 
@@ -367,20 +375,24 @@ export default function Reports() {
             <BarChart data={reportData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="department" stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
-              <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
+              <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip
+                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                 contentStyle={{
-                  backgroundColor: "#1a1a1a",
-                  border: "1px solid #333",
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
                   borderRadius: "8px",
                   fontSize: "12px",
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
+                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 }}
                 labelStyle={{
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
+                  fontWeight: "600",
+                  marginBottom: "4px",
                 }}
                 itemStyle={{
-                  color: "#f5f5f5",
+                  color: "hsl(var(--foreground))",
                 }}
               />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
@@ -392,7 +404,7 @@ export default function Reports() {
           </div>
         ) : (
           <div className="text-center py-12 text-muted-foreground">
-            Generate a report to see the chart
+            Select an event to automatically generate the report
           </div>
         )}
       </div>

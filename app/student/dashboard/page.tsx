@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts"
 import { Calendar, Clock, Award, TrendingUp, Loader2, MapPin, Bell, CalendarDays } from "lucide-react"
 import { getCurrentUser } from "@/lib/auth"
+import { formatTimeDisplay } from "@/lib/time-utils"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface DashboardStats {
   eventsAttended: number
@@ -204,8 +206,67 @@ export default function StudentDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+        <div>
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-64 mt-2" />
+        </div>
+        
+        {/* Skeleton Stat Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-card rounded-lg border border-border p-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-6 w-12" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton Chart & Upcoming */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-card rounded-lg border border-border p-4 sm:p-6">
+            <Skeleton className="h-6 w-40 mb-4" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+          <div className="bg-card rounded-lg border border-border p-4 sm:p-6">
+            <Skeleton className="h-6 w-40 mb-4" />
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                  <Skeleton className="h-12 w-12 rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Skeleton Recent Events */}
+        <div className="bg-card rounded-lg border border-border">
+          <div className="p-4 border-b border-border">
+            <Skeleton className="h-6 w-40" />
+          </div>
+          <div className="divide-y divide-border">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="p-4 flex items-center gap-4">
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -260,7 +321,7 @@ export default function StudentDashboard() {
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3" />
-                      <span>{event.timeIn} - {event.timeOut}</span>
+                      <span>{formatTimeDisplay(event.timeIn)} - {formatTimeDisplay(event.timeOut)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3 h-3" />
@@ -326,20 +387,24 @@ export default function StudentDashboard() {
               <LineChart data={attendanceData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
                 <XAxis dataKey="month" stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
-                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
+                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip
+                  cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 1, strokeOpacity: 0.3 }}
                   contentStyle={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid #333",
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                     fontSize: "12px",
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                   }}
                   labelStyle={{
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
+                    fontWeight: "600",
+                    marginBottom: "4px",
                   }}
                   itemStyle={{
-                    color: "#f5f5f5",
+                    color: "hsl(var(--foreground))",
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: "12px" }} />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon } from "lucide-react"
 import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { TimePicker } from "@/components/ui/time-picker"
 import { format } from "date-fns"
+import { formatTimeDisplay } from "@/lib/time-utils"
 
 interface Event {
   id: string
@@ -29,6 +31,7 @@ interface Event {
   timeIn: string
   timeOut: string
   status: string
+  createdAt: string
   _count?: {
     attendanceRecords: number
     certificates: number
@@ -173,6 +176,14 @@ export default function EventManagement() {
     })
   }
 
+  // Check if event is new (created within last 24 hours)
+  const isNewEvent = (createdAt: string) => {
+    const created = new Date(createdAt)
+    const now = new Date()
+    const diffInHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+    return diffInHours <= 24
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -190,9 +201,28 @@ export default function EventManagement() {
 
       {/* Events Grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="ml-2 text-muted-foreground">Loading events...</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-card rounded-lg border border-border p-6">
+              <div className="flex items-start justify-between mb-4">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <div className="space-y-3 mb-6">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <Skeleton className="h-14 rounded" />
+                <Skeleton className="h-14 rounded" />
+              </div>
+              <div className="flex gap-2">
+                <Skeleton className="h-9 flex-1 rounded-lg" />
+                <Skeleton className="h-9 w-9 rounded-lg" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div className="text-center py-12 text-red-500">{error}</div>
@@ -203,12 +233,23 @@ export default function EventManagement() {
         {events.map((event) => (
           <div
             key={event.id}
-            className="bg-card rounded-lg border border-border p-6 hover:border-primary/50 transition-colors"
+            className={`bg-card rounded-lg border p-6 hover:border-primary/50 transition-colors ${
+              isNewEvent(event.createdAt) ? "border-primary/30 ring-1 ring-primary/20" : "border-border"
+            }`}
           >
             <div className="flex items-start justify-between mb-4">
-              <h3 className="font-semibold text-foreground text-lg flex-1">{event.name}</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-lg">{event.name}</h3>
+                  {isNewEvent(event.createdAt) && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground animate-pulse">
+                      New
+                    </span>
+                  )}
+                </div>
+              </div>
               <span
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                className={`px-3 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${
                   event.status === "ACTIVE"
                     ? "bg-green-500/10 text-green-600 dark:text-green-400"
                     : event.status === "UPCOMING"
@@ -238,11 +279,11 @@ export default function EventManagement() {
             <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
               <div className="bg-muted p-2 rounded">
                 <p className="text-muted-foreground text-xs">Time-In</p>
-                <p className="font-semibold text-foreground">{event.timeIn}</p>
+                <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeIn)}</p>
               </div>
               <div className="bg-muted p-2 rounded">
                 <p className="text-muted-foreground text-xs">Time-Out</p>
-                <p className="font-semibold text-foreground">{event.timeOut}</p>
+                <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeOut)}</p>
               </div>
             </div>
 
@@ -419,6 +460,9 @@ function EditEventModal({
     timeOut: event.timeOut,
   })
   
+  // Check if event is active or closed (started)
+  const isEventStarted = event.status === "ACTIVE" || event.status === "CLOSED"
+  
   // Initialize date from event
   useEffect(() => {
     if (event.date) {
@@ -437,7 +481,29 @@ function EditEventModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
       <div className="bg-card rounded-t-lg sm:rounded-lg p-4 sm:p-6 w-full sm:max-w-lg border border-border max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg sm:text-xl font-bold text-foreground mb-4">Edit Event</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg sm:text-xl font-bold text-foreground">Edit Event</h2>
+          <span className={`px-2 py-1 rounded text-xs font-medium ${
+            event.status === "ACTIVE" 
+              ? "bg-green-500/10 text-green-600 dark:text-green-400" 
+              : event.status === "CLOSED"
+                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          }`}>
+            {event.status}
+          </span>
+        </div>
+        
+        {/* Warning for active/closed events */}
+        {isEventStarted && (
+          <div className="mb-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm">
+            <p className="text-yellow-700 dark:text-yellow-400 font-medium">⚠️ Event has already started</p>
+            <p className="text-yellow-600 dark:text-yellow-500 text-xs mt-1">
+              Date and Time-In cannot be modified. You can only edit event name, venue, and time-out.
+            </p>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Event Name</label>
@@ -451,25 +517,31 @@ function EditEventModal({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Date</label>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Date
+                {isEventStarted && <span className="text-muted-foreground ml-1">(locked)</span>}
+              </label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="w-full justify-start text-left font-normal"
+                    className={`w-full justify-start text-left font-normal ${isEventStarted ? "opacity-50 cursor-not-allowed" : ""}`}
+                    disabled={isEventStarted}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {editEventDate ? format(editEventDate, "PPP") : <span className="text-muted-foreground">Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={editEventDate}
-                    onSelect={setEditEventDate}
-                    initialFocus
-                  />
-                </PopoverContent>
+                {!isEventStarted && (
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={editEventDate}
+                      onSelect={setEditEventDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                )}
               </Popover>
             </div>
             <div>
@@ -485,11 +557,20 @@ function EditEventModal({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Time-In</label>
-              <TimePicker
-                value={formData.timeIn}
-                onChange={(value) => setFormData({ ...formData, timeIn: value })}
-              />
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Time-In
+                {isEventStarted && <span className="text-muted-foreground ml-1">(locked)</span>}
+              </label>
+              {isEventStarted ? (
+                <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
+                  {formData.timeIn}
+                </div>
+              ) : (
+                <TimePicker
+                  value={formData.timeIn}
+                  onChange={(value) => setFormData({ ...formData, timeIn: value })}
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Time-Out</label>
