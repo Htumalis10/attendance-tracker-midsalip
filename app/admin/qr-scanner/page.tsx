@@ -30,6 +30,7 @@ interface ScannedStudent {
   timeIn?: string
   timeOut?: string
   scanType: "time-in" | "time-out"
+  period?: "morning" | "afternoon" | "evening"
   status: "pending" | "approved" | "rejected"
   lateMinutes?: number
 }
@@ -40,6 +41,10 @@ interface Event {
   startTime: string
   timeIn: string
   timeOut: string
+  afternoonTimeIn?: string
+  afternoonTimeOut?: string
+  eveningTimeIn?: string
+  eveningTimeOut?: string
   date: string
   type?: string
   parentEventId?: string | null
@@ -61,6 +66,10 @@ interface UpcomingEvent {
   venue: string
   timeIn: string
   timeOut: string
+  afternoonTimeIn?: string
+  afternoonTimeOut?: string
+  eveningTimeIn?: string
+  eveningTimeOut?: string
   status: string
 }
 
@@ -130,41 +139,99 @@ export default function QRScanner() {
     }
   }, [scanHistory, isHydrated])
 
-  // Auto-switch to Time Out mode when Time In period ends
+  // Auto-switch scan mode based on current period phase
   useEffect(() => {
-    if (selectedEventId && isTimeOutAvailable() && scanMode === "time-in") {
+    if (!selectedEventId) return
+    if (isTimeOutAvailable() && scanMode === "time-in") {
       setScanMode("time-out")
+      setScanError(null)
+    }
+    // When a new period starts, switch back to time-in
+    if (!isTimeOutAvailable() && scanMode === "time-out" && isTimeInAvailable()) {
+      setScanMode("time-in")
       setScanError(null)
     }
   }, [currentTime, selectedEventId, scanMode])
 
-  // Check if time-in is available (current time < scheduled time-out)
-  // Time-in is allowed from event start until the event ends
+  // Determine which period is currently active based on current time
+  const getCurrentPeriod = (): "morning" | "afternoon" | "evening" => {
+    if (!selectedEventId) return "morning"
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event) return "morning"
+    
+    const now = new Date()
+    
+    if (event.eveningTimeIn) {
+      const [h, m] = event.eveningTimeIn.split(":").map(Number)
+      const t = new Date(); t.setHours(h, m, 0, 0)
+      if (now >= t) return "evening"
+    }
+    
+    if (event.afternoonTimeIn) {
+      const [h, m] = event.afternoonTimeIn.split(":").map(Number)
+      const t = new Date(); t.setHours(h, m, 0, 0)
+      if (now >= t) return "afternoon"
+    }
+    
+    return "morning"
+  }
+
+  // Get effective timeIn/timeOut for the current period
+  const getEffectiveTimes = () => {
+    if (!selectedEventId) return { timeIn: "", timeOut: "" }
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event) return { timeIn: "", timeOut: "" }
+    
+    const period = getCurrentPeriod()
+    if (period === "afternoon" && event.afternoonTimeIn && event.afternoonTimeOut) {
+      return { timeIn: event.afternoonTimeIn, timeOut: event.afternoonTimeOut }
+    }
+    if (period === "evening" && event.eveningTimeIn && event.eveningTimeOut) {
+      return { timeIn: event.eveningTimeIn, timeOut: event.eveningTimeOut }
+    }
+    return { timeIn: event.timeIn, timeOut: event.timeOut }
+  }
+
+  // Check if there's a next period after the current one
+  const getNextPeriodInfo = () => {
+    if (!selectedEventId) return null
+    const event = events.find(e => e.id === selectedEventId)
+    if (!event) return null
+    
+    const period = getCurrentPeriod()
+    if (period === "morning" && event.afternoonTimeIn) {
+      return { name: "Afternoon", timeIn: event.afternoonTimeIn }
+    }
+    if (period === "afternoon" && event.eveningTimeIn) {
+      return { name: "Evening", timeIn: event.eveningTimeIn }
+    }
+    return null
+  }
+
+  // Check if time-in is available for current period
   const isTimeInAvailable = () => {
     if (!selectedEventId) return false
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeOut) return false
+    const { timeOut } = getEffectiveTimes()
+    if (!timeOut) return false
     
-    const [hours, minutes] = event.timeOut.split(":").map(Number)
+    const [hours, minutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
     timeOutDate.setHours(hours, minutes, 0, 0)
     
-    // Use fresh Date() instead of currentTime state for accurate check
     const now = new Date()
     return now < timeOutDate
   }
 
-  // Check if time-out is available (current time >= scheduled time-out)
+  // Check if time-out is available for current period
   const isTimeOutAvailable = () => {
     if (!selectedEventId) return false
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeOut) return false
+    const { timeOut } = getEffectiveTimes()
+    if (!timeOut) return false
     
-    const [hours, minutes] = event.timeOut.split(":").map(Number)
+    const [hours, minutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
     timeOutDate.setHours(hours, minutes, 0, 0)
     
-    // Use fresh Date() instead of currentTime state for accurate check
     const now = new Date()
     return now >= timeOutDate
   }
@@ -194,14 +261,14 @@ export default function QRScanner() {
   // Check if time-out grace period is still active
   const isTimeOutGracePeriodActive = () => {
     if (!selectedEventId) return false
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeIn || !event?.timeOut) return false
+    const { timeIn, timeOut } = getEffectiveTimes()
+    if (!timeIn || !timeOut) return false
     
-    const [outHours, outMinutes] = event.timeOut.split(":").map(Number)
+    const [outHours, outMinutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
     timeOutDate.setHours(outHours, outMinutes, 0, 0)
     
-    const gracePeriod = calculateGracePeriod(event.timeIn, event.timeOut)
+    const gracePeriod = calculateGracePeriod(timeIn, timeOut)
     const graceEndDate = new Date(timeOutDate.getTime() + gracePeriod * 60 * 1000)
     
     const now = new Date()
@@ -211,14 +278,14 @@ export default function QRScanner() {
   // Get time-out grace period countdown info
   const getTimeOutGraceInfo = () => {
     if (!selectedEventId) return null
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeIn || !event?.timeOut) return null
+    const { timeIn, timeOut } = getEffectiveTimes()
+    if (!timeIn || !timeOut) return null
     
-    const [outHours, outMinutes] = event.timeOut.split(":").map(Number)
+    const [outHours, outMinutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
     timeOutDate.setHours(outHours, outMinutes, 0, 0)
     
-    const gracePeriod = calculateGracePeriod(event.timeIn, event.timeOut)
+    const gracePeriod = calculateGracePeriod(timeIn, timeOut)
     const graceEndDate = new Date(timeOutDate.getTime() + gracePeriod * 60 * 1000)
     
     const now = currentTime
@@ -242,7 +309,19 @@ export default function QRScanner() {
       }
     }
     
-    // Grace period ended, event will close
+    // Grace period ended - check if there's a next period
+    const nextPeriod = getNextPeriodInfo()
+    if (nextPeriod) {
+      return {
+        status: "period-ended",
+        message: `${getCurrentPeriod().charAt(0).toUpperCase() + getCurrentPeriod().slice(1)} period ended — ${nextPeriod.name} starts at ${formatTimeDisplay(nextPeriod.timeIn)}`,
+        gracePeriod,
+        timeRemaining: 0,
+        nextPeriodName: nextPeriod.name,
+        nextPeriodTimeIn: nextPeriod.timeIn
+      }
+    }
+    
     return {
       status: "grace-ended",
       message: "Grace period ended - Event closing",
@@ -254,10 +333,10 @@ export default function QRScanner() {
   // Get time remaining until time-out is available
   const getTimeUntilTimeOut = () => {
     if (!selectedEventId) return null
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeOut) return null
+    const { timeOut } = getEffectiveTimes()
+    if (!timeOut) return null
     
-    const [hours, minutes] = event.timeOut.split(":").map(Number)
+    const [hours, minutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
     timeOutDate.setHours(hours, minutes, 0, 0)
     
@@ -282,10 +361,10 @@ export default function QRScanner() {
   // Get time info for late countdown
   const getLateCountdownInfo = () => {
     if (!selectedEventId) return null
-    const event = events.find(e => e.id === selectedEventId)
-    if (!event?.timeIn) return null
+    const { timeIn } = getEffectiveTimes()
+    if (!timeIn) return null
     
-    const [hours, minutes] = event.timeIn.split(":").map(Number)
+    const [hours, minutes] = timeIn.split(":").map(Number)
     const eventStartTime = new Date()
     eventStartTime.setHours(hours, minutes, 0, 0)
     
@@ -351,8 +430,9 @@ export default function QRScanner() {
         }
       }
 
-      // For SG Officers, also fetch upcoming events to show schedule when locked
-      if (isSGOfficer) {
+      // Always fetch upcoming events for SG Officers (check role directly from localStorage)
+      const currentUser = getCurrentUser()
+      if (currentUser?.role === "sg_officer") {
         const upRes = await fetch("/api/events?status=UPCOMING")
         if (upRes.ok) {
           const upData = await upRes.json()
@@ -567,31 +647,36 @@ export default function QRScanner() {
       
       // For time-out, check if student has checked in first
       let missedTimeIn = false
+      const currentPeriod = getCurrentPeriod()
       if (effectiveScanMode === "time-out") {
-        // Check if already scanned for time-out
+        // Check if already scanned for time-out in current period
         const alreadyTimedOut = scanHistory.find(
-          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-out"
+          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-out" && s.period === currentPeriod
         )
         if (alreadyTimedOut) {
-          setScanError(`${student.name} already timed out for this event`)
+          setScanError(`${student.name} already timed out for ${currentPeriod} period`)
           playBeep(false)
           return
         }
         
-        // Check if they have checked in (either in history or database)
+        // Check if they have checked in for current period
         const hasCheckedIn = scanHistory.find(
-          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-in" && s.status === "approved"
+          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-in" && s.period === currentPeriod && s.status === "approved"
         )
         
         if (!hasCheckedIn) {
-          // Check database for existing time-in
+          // Check database for existing time-in for this period
           try {
             const attendanceRes = await fetch(`/api/attendance?userId=${student.id}&eventId=${selectedEventId}`)
             if (attendanceRes.ok) {
               const records = await attendanceRes.json()
-              const hasDbTimeIn = records.length > 0 && records[0].timeIn
+              let hasDbTimeIn = false
+              if (records.length > 0) {
+                if (currentPeriod === "morning") hasDbTimeIn = !!records[0].timeIn
+                else if (currentPeriod === "afternoon") hasDbTimeIn = !!records[0].afternoonTimeIn
+                else if (currentPeriod === "evening") hasDbTimeIn = !!records[0].eveningTimeIn
+              }
               if (!hasDbTimeIn) {
-                // Allow time-out but mark as late since they missed time-in
                 missedTimeIn = true
               }
             }
@@ -602,17 +687,17 @@ export default function QRScanner() {
       } else {
         // For time-in, check if time-in period is still available
         if (!isTimeInAvailable()) {
-          setScanError("Time-in period has ended. The event has finished.")
+          setScanError(`Time-in period has ended for ${currentPeriod}.`)
           playBeep(false)
           return
         }
         
-        // For time-in, check if already scanned
+        // For time-in, check if already scanned for current period
         const alreadyScanned = scanHistory.find(
-          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-in"
+          s => s.schoolId === student.schoolId && s.eventId === selectedEventId && s.scanType === "time-in" && s.period === currentPeriod
         )
         if (alreadyScanned) {
-          setScanError(`${student.name} already scanned for time-in`)
+          setScanError(`${student.name} already scanned for ${currentPeriod} time-in`)
           playBeep(false)
           return
         }
@@ -622,15 +707,16 @@ export default function QRScanner() {
       
       const now = new Date()
       
-      // Calculate late minutes based on event time-in
+      // Calculate late minutes based on current period's time-in
       let lateMinutes = 0
-      if (selectedEventData?.timeIn && effectiveScanMode === "time-in") {
-        const [hours, mins] = selectedEventData.timeIn.split(":").map(Number)
+      const effectiveTimes = getEffectiveTimes()
+      if (effectiveTimes.timeIn && effectiveScanMode === "time-in") {
+        const [hours, mins] = effectiveTimes.timeIn.split(":").map(Number)
         const eventStartTime = new Date()
         eventStartTime.setHours(hours, mins, 0, 0)
         lateMinutes = Math.max(0, Math.floor((now.getTime() - eventStartTime.getTime()) / 60000))
       }
-      const isLate = lateMinutes > LATE_THRESHOLD_MINUTES // 15 minute grace period
+      const isLate = lateMinutes > LATE_THRESHOLD_MINUTES
 
       const scannedStudent: ScannedStudent = {
         id: Date.now().toString(),
@@ -644,8 +730,9 @@ export default function QRScanner() {
         timeIn: effectiveScanMode === "time-in" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
         timeOut: effectiveScanMode === "time-out" ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : undefined,
         scanType: effectiveScanMode,
-        status: "approved", // Auto-approve
-        lateMinutes: effectiveScanMode === "time-in" && isLate ? lateMinutes : (missedTimeIn ? -1 : undefined), // -1 indicates missed time-in
+        period: currentPeriod,
+        status: "approved",
+        lateMinutes: effectiveScanMode === "time-in" && isLate ? lateMinutes : (missedTimeIn ? -1 : undefined),
       }
 
       // Auto-save to database immediately
@@ -685,6 +772,7 @@ export default function QRScanner() {
               userId: student.id,
               eventId: selectedEventId,
               type: effectiveScanMode,
+              period: currentPeriod,
               status: attendanceStatus,
             }),
           })
@@ -831,33 +919,34 @@ export default function QRScanner() {
     // Find the next upcoming event to show countdown
     const sortedUpcoming = [...upcomingEvents]
       .filter(e => e.status === "UPCOMING")
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .sort((a, b) => {
+        const dateA = new Date(a.date)
+        const dateB = new Date(b.date)
+        const [hA, mA] = a.timeIn.split(":").map(Number)
+        const [hB, mB] = b.timeIn.split(":").map(Number)
+        dateA.setHours(hA, mA, 0, 0)
+        dateB.setHours(hB, mB, 0, 0)
+        return dateA.getTime() - dateB.getTime()
+      })
 
-    // Calculate countdown for the nearest event today
+    // Calculate countdown for any upcoming event
     const getCountdown = (event: UpcomingEvent) => {
       const eventDate = new Date(event.date)
       const eventYear = eventDate.getUTCFullYear()
       const eventMonth = eventDate.getUTCMonth()
       const eventDay = eventDate.getUTCDate()
-      const todayYear = currentTime.getFullYear()
-      const todayMonth = currentTime.getMonth()
-      const todayDay = currentTime.getDate()
-      const isToday = eventYear === todayYear && eventMonth === todayMonth && eventDay === todayDay
-
-      if (!isToday) return null
 
       const [h, m] = event.timeIn.split(":").map(Number)
-      const startTime = new Date(todayYear, todayMonth, todayDay, h, m, 0)
+      const startTime = new Date(eventYear, eventMonth, eventDay, h, m, 0)
       const diff = startTime.getTime() - currentTime.getTime()
       if (diff <= 0) return null
 
-      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
       const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
       const secs = Math.floor((diff % (1000 * 60)) / 1000)
 
-      if (hours > 0) return `${hours}h ${mins}m ${secs}s`
-      if (mins > 0) return `${mins}m ${secs}s`
-      return `${secs}s`
+      return { days, hours, mins, secs, total: diff }
     }
 
     const nextEvent = sortedUpcoming[0] || null
@@ -881,12 +970,44 @@ export default function QRScanner() {
             </p>
           </div>
 
-          {/* Countdown for today's next event */}
+          {/* Countdown Timer for next event */}
           {countdown && nextEvent && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
-              <p className="text-emerald-600 dark:text-emerald-400 text-xs font-medium uppercase tracking-wider mb-1">Unlocks in</p>
-              <p className="text-emerald-600 dark:text-emerald-400 text-2xl sm:text-3xl font-mono font-bold">{countdown}</p>
-              <p className="text-emerald-600/70 dark:text-emerald-400/70 text-xs mt-1">{nextEvent.name}</p>
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5 space-y-3">
+              <p className="text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold uppercase tracking-widest">Next Event Starts In</p>
+              <div className="flex items-center justify-center gap-2 sm:gap-3">
+                {countdown.days > 0 && (
+                  <>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+                        <span className="text-emerald-500 text-xl sm:text-2xl font-mono font-bold">{countdown.days}</span>
+                      </div>
+                      <span className="text-emerald-600/50 dark:text-emerald-400/50 text-[10px] mt-1 uppercase">Days</span>
+                    </div>
+                    <span className="text-emerald-500/40 text-xl font-bold mt-[-16px]">:</span>
+                  </>
+                )}
+                <div className="flex flex-col items-center">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+                    <span className="text-emerald-500 text-xl sm:text-2xl font-mono font-bold">{String(countdown.hours).padStart(2, '0')}</span>
+                  </div>
+                  <span className="text-emerald-600/50 dark:text-emerald-400/50 text-[10px] mt-1 uppercase">Hours</span>
+                </div>
+                <span className="text-emerald-500/40 text-xl font-bold mt-[-16px]">:</span>
+                <div className="flex flex-col items-center">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+                    <span className="text-emerald-500 text-xl sm:text-2xl font-mono font-bold">{String(countdown.mins).padStart(2, '0')}</span>
+                  </div>
+                  <span className="text-emerald-600/50 dark:text-emerald-400/50 text-[10px] mt-1 uppercase">Mins</span>
+                </div>
+                <span className="text-emerald-500/40 text-xl font-bold mt-[-16px]">:</span>
+                <div className="flex flex-col items-center">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">
+                    <span className="text-emerald-500 text-xl sm:text-2xl font-mono font-bold">{String(countdown.secs).padStart(2, '0')}</span>
+                  </div>
+                  <span className="text-emerald-600/50 dark:text-emerald-400/50 text-[10px] mt-1 uppercase">Secs</span>
+                </div>
+              </div>
+              <p className="text-emerald-600/70 dark:text-emerald-400/70 text-xs font-medium">{nextEvent.name}</p>
             </div>
           )}
 
@@ -901,6 +1022,7 @@ export default function QRScanner() {
                 {sortedUpcoming.slice(0, 5).map((event) => {
                   const eventDate = new Date(event.date)
                   const isToday = eventDate.toDateString() === new Date().toDateString()
+                  const evtCountdown = getCountdown(event)
                   return (
                     <div
                       key={event.id}
@@ -911,7 +1033,7 @@ export default function QRScanner() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <p className="font-medium text-foreground">{event.name}</p>
+                        <p className="font-medium text-foreground text-sm">{event.name}</p>
                         {isToday && (
                           <span className="text-[10px] bg-primary/10 text-primary font-semibold px-1.5 py-0.5 rounded-full">TODAY</span>
                         )}
@@ -925,11 +1047,28 @@ export default function QRScanner() {
                           <Clock className="w-3 h-3" />
                           {event.timeIn} - {event.timeOut}
                         </span>
+                        {event.afternoonTimeIn && event.afternoonTimeOut && (
+                          <span className="flex items-center gap-1 text-blue-500">
+                            <Clock className="w-3 h-3" />
+                            {event.afternoonTimeIn} - {event.afternoonTimeOut}
+                          </span>
+                        )}
+                        {event.eveningTimeIn && event.eveningTimeOut && (
+                          <span className="flex items-center gap-1 text-violet-500">
+                            <Clock className="w-3 h-3" />
+                            {event.eveningTimeIn} - {event.eveningTimeOut}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" />
                           {event.venue}
                         </span>
                       </div>
+                      {evtCountdown && (
+                        <p className="text-[11px] text-primary font-medium mt-1.5">
+                          ⏱ {evtCountdown.days > 0 ? `${evtCountdown.days}d ` : ""}{String(evtCountdown.hours).padStart(2, '0')}h {String(evtCountdown.mins).padStart(2, '0')}m {String(evtCountdown.secs).padStart(2, '0')}s
+                        </p>
+                      )}
                     </div>
                   )
                 })}
@@ -1132,22 +1271,64 @@ export default function QRScanner() {
             </div>
             
             {/* Event Time Info */}
-            {selectedEventId && events.find(e => e.id === selectedEventId) && (
-              <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <span className="text-muted-foreground">Time In:</span>
-                    <span className="font-medium text-foreground">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeIn || "08:00")}</span>
+            {selectedEventId && events.find(e => e.id === selectedEventId) && (() => {
+              const evt = events.find(e => e.id === selectedEventId)!
+              const period = getCurrentPeriod()
+              return (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  {/* Current Period Indicator */}
+                  <div className="flex items-center gap-2 text-xs font-medium">
+                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {period.charAt(0).toUpperCase() + period.slice(1)} Period
+                    </span>
+                    {evt.afternoonTimeIn && <span className="text-muted-foreground">Multi-period event</span>}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                    <span className="text-muted-foreground">Time Out:</span>
-                    <span className="font-medium text-foreground">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeOut || "17:00")}</span>
+                  {/* Morning */}
+                  <div className={`flex items-center gap-4 text-sm ${period === "morning" ? "text-foreground" : "text-muted-foreground/60"}`}>
+                    <span className="text-xs font-medium w-16">Morning</span>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                      <span className="font-medium">{formatTimeDisplay(evt.timeIn)}</span>
+                    </div>
+                    <span className="text-muted-foreground">→</span>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                      <span className="font-medium">{formatTimeDisplay(evt.timeOut)}</span>
+                    </div>
                   </div>
+                  {/* Afternoon */}
+                  {evt.afternoonTimeIn && evt.afternoonTimeOut && (
+                    <div className={`flex items-center gap-4 text-sm ${period === "afternoon" ? "text-foreground" : "text-muted-foreground/60"}`}>
+                      <span className="text-xs font-medium w-16">Afternoon</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                        <span className="font-medium">{formatTimeDisplay(evt.afternoonTimeIn)}</span>
+                      </div>
+                      <span className="text-muted-foreground">→</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                        <span className="font-medium">{formatTimeDisplay(evt.afternoonTimeOut)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Evening */}
+                  {evt.eveningTimeIn && evt.eveningTimeOut && (
+                    <div className={`flex items-center gap-4 text-sm ${period === "evening" ? "text-foreground" : "text-muted-foreground/60"}`}>
+                      <span className="text-xs font-medium w-16">Evening</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                        <span className="font-medium">{formatTimeDisplay(evt.eveningTimeIn)}</span>
+                      </div>
+                      <span className="text-muted-foreground">→</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                        <span className="font-medium">{formatTimeDisplay(evt.eveningTimeOut)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )
+            })()}
             
             {/* Scan Mode Toggle */}
             <div>
@@ -1300,6 +1481,9 @@ export default function QRScanner() {
                 <p className="font-semibold text-foreground">Ready to Scan</p>
                 <p className="text-muted-foreground text-xs sm:text-sm mt-1">
                   Point the camera at a student's QR code for <span className={`font-medium ${scanMode === "time-in" ? "text-green-600" : "text-orange-600"}`}>{scanMode === "time-in" ? "Time In" : "Time Out"}</span>
+                  {selectedEventId && (
+                    <span className="text-muted-foreground ml-1">({getCurrentPeriod()})</span>
+                  )}
                 </p>
                 {!selectedEventId && (
                   <p className="text-yellow-600 dark:text-yellow-400 text-xs mt-2 font-medium">
@@ -1338,9 +1522,9 @@ export default function QRScanner() {
                   <Clock className="w-5 h-5 text-orange-500" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold text-orange-600 dark:text-orange-400">Time Out not yet available</p>
+                  <p className="font-semibold text-orange-600 dark:text-orange-400">Time Out not yet available ({getCurrentPeriod()})</p>
                   <p className="text-sm text-orange-600/80 dark:text-orange-400/80 mt-1">
-                    Available at <span className="font-bold">{formatTimeDisplay(events.find(e => e.id === selectedEventId)?.timeOut || "")}</span>
+                    Available at <span className="font-bold">{formatTimeDisplay(getEffectiveTimes().timeOut)}</span>
                   </p>
                   {getTimeUntilTimeOut() && (
                     <div className="mt-2 flex items-center gap-2">
@@ -1447,7 +1631,9 @@ export default function QRScanner() {
                 ? "bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-orange-500/30"
                 : getTimeOutGraceInfo()?.status === "grace-ended"
                   ? "bg-gradient-to-r from-red-500/10 to-rose-500/10 border-red-500/30"
-                  : "bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30"
+                  : getTimeOutGraceInfo()?.status === "period-ended"
+                    ? "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/30"
+                    : "bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/30"
             }`}>
               <div className="flex items-start gap-3">
                 <div className={`p-2 rounded-lg ${
@@ -1455,12 +1641,16 @@ export default function QRScanner() {
                     ? "bg-orange-500/20"
                     : getTimeOutGraceInfo()?.status === "grace-ended"
                       ? "bg-red-500/20"
-                      : "bg-green-500/20"
+                      : getTimeOutGraceInfo()?.status === "period-ended"
+                        ? "bg-blue-500/20"
+                        : "bg-green-500/20"
                 }`}>
                   {getTimeOutGraceInfo()?.status === "grace-active" ? (
                     <Clock className="w-5 h-5 text-orange-500" />
                   ) : getTimeOutGraceInfo()?.status === "grace-ended" ? (
                     <AlertCircle className="w-5 h-5 text-red-500" />
+                  ) : getTimeOutGraceInfo()?.status === "period-ended" ? (
+                    <Clock className="w-5 h-5 text-blue-500" />
                   ) : (
                     <CheckCircle className="w-5 h-5 text-green-500" />
                   )}
@@ -1472,10 +1662,13 @@ export default function QRScanner() {
                         ? "text-orange-600 dark:text-orange-400"
                         : getTimeOutGraceInfo()?.status === "grace-ended"
                           ? "text-red-600 dark:text-red-400"
-                          : "text-green-600 dark:text-green-400"
+                          : getTimeOutGraceInfo()?.status === "period-ended"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-green-600 dark:text-green-400"
                     }`}>
-                      {getTimeOutGraceInfo()?.status === "grace-active" && "Time Out Available"}
+                      {getTimeOutGraceInfo()?.status === "grace-active" && `Time Out Available (${getCurrentPeriod()})`}
                       {getTimeOutGraceInfo()?.status === "grace-ended" && "Time Out Closed"}
+                      {getTimeOutGraceInfo()?.status === "period-ended" && `${getCurrentPeriod().charAt(0).toUpperCase() + getCurrentPeriod().slice(1)} Period Ended`}
                       {!getTimeOutGraceInfo() && "Time Out Active"}
                     </p>
                     {getTimeOutGraceInfo()?.countdown && (
@@ -1489,13 +1682,18 @@ export default function QRScanner() {
                       ? "text-orange-600/80 dark:text-orange-400/80"
                       : getTimeOutGraceInfo()?.status === "grace-ended"
                         ? "text-red-600/80 dark:text-red-400/80"
-                        : "text-green-600/80 dark:text-green-400/80"
+                        : getTimeOutGraceInfo()?.status === "period-ended"
+                          ? "text-blue-600/80 dark:text-blue-400/80"
+                          : "text-green-600/80 dark:text-green-400/80"
                   }`}>
                     {getTimeOutGraceInfo()?.status === "grace-active" && (
                       <>Students can now Time Out within <span className="font-bold bg-orange-500/20 px-1 rounded">{getTimeOutGraceInfo()?.gracePeriod} min</span> window</>
                     )}
                     {getTimeOutGraceInfo()?.status === "grace-ended" && (
                       <>Time Out window closed. Event will be automatically closed.</>
+                    )}
+                    {getTimeOutGraceInfo()?.status === "period-ended" && (
+                      <>{getTimeOutGraceInfo()?.message}</>
                     )}
                     {!getTimeOutGraceInfo() && (
                       <>Time In period has ended. Scanning for <span className="font-bold">Time Out</span> only.</>
@@ -1573,6 +1771,13 @@ export default function QRScanner() {
                       }`}>
                         {scan.scanType === "time-out" ? "OUT" : "IN"}
                       </span>
+                      {scan.period && scan.period !== "morning" && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          scan.period === "afternoon" ? "bg-blue-500/10 text-blue-500" : "bg-violet-500/10 text-violet-500"
+                        }`}>
+                          {scan.period.toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <p className="text-muted-foreground text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">{scan.course}</p>
                     <div className="flex gap-3 sm:gap-4 mt-1.5 sm:mt-2 text-xs text-muted-foreground">

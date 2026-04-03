@@ -27,8 +27,28 @@ function calculateGracePeriod(timeIn: string, timeOut: string): number {
   }
 }
 
+// Helper: get the latest timeOut across all periods of an event
+function getLastTimeOut(event: { timeOut: string; afternoonTimeOut?: string | null; eveningTimeOut?: string | null }): string {
+  if (event.eveningTimeOut) return event.eveningTimeOut
+  if (event.afternoonTimeOut) return event.afternoonTimeOut
+  return event.timeOut
+}
+
+// Helper: get the earliest timeIn of an event
+function getFirstTimeIn(event: { timeIn: string }): string {
+  return event.timeIn
+}
+
+// Helper: build time summary string for notifications
+function getTimeSummary(event: { timeIn: string; timeOut: string; afternoonTimeIn?: string | null; afternoonTimeOut?: string | null; eveningTimeIn?: string | null; eveningTimeOut?: string | null }): string {
+  const parts = [`${event.timeIn} - ${event.timeOut}`]
+  if (event.afternoonTimeIn && event.afternoonTimeOut) parts.push(`${event.afternoonTimeIn} - ${event.afternoonTimeOut}`)
+  if (event.eveningTimeIn && event.eveningTimeOut) parts.push(`${event.eveningTimeIn} - ${event.eveningTimeOut}`)
+  return parts.join(", ")
+}
+
 // Helper function to determine the correct event status based on date/time
-function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string }): string {
+function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string; afternoonTimeOut?: string | null; eveningTimeOut?: string | null }): string {
   const now = new Date()
   const eventDate = new Date(event.date)
   
@@ -42,16 +62,17 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   const todayMonth = now.getMonth()
   const todayDay = now.getDate()
   
-  // Parse timeIn and timeOut (supports both 24-hour "HH:mm" format)
+  // Parse timeIn and the LAST timeOut (supports both 24-hour "HH:mm" format)
   const [timeInHour, timeInMin] = event.timeIn.split(":").map(Number)
-  const [timeOutHour, timeOutMin] = event.timeOut.split(":").map(Number)
+  const lastTimeOut = getLastTimeOut(event)
+  const [timeOutHour, timeOutMin] = lastTimeOut.split(":").map(Number)
   
   // Create full datetime for event start and end in LOCAL time
   const eventStart = new Date(eventYear, eventMonth, eventDay, timeInHour, timeInMin, 0, 0)
   const eventEnd = new Date(eventYear, eventMonth, eventDay, timeOutHour, timeOutMin, 0, 0)
   
   // Calculate dynamic grace period based on event duration
-  const gracePeriodMinutes = calculateGracePeriod(event.timeIn, event.timeOut)
+  const gracePeriodMinutes = calculateGracePeriod(event.timeIn, lastTimeOut)
   
   // Add grace period for time-out
   const eventEndWithGrace = new Date(eventEnd.getTime() + gracePeriodMinutes * 60 * 1000)
@@ -301,7 +322,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, description, date, venue, organizer, timeIn, timeOut, status, type, parentEventId } = body
+    const { name, description, date, venue, organizer, timeIn, timeOut, afternoonTimeIn, afternoonTimeOut, eveningTimeIn, eveningTimeOut, status, type, parentEventId } = body
 
     const eventDate = new Date(date)
     
@@ -334,6 +355,8 @@ export async function POST(request: NextRequest) {
         date: eventDate,
         timeIn: timeIn || "08:00",
         timeOut: timeOut || "17:00",
+        afternoonTimeOut: afternoonTimeOut || null,
+        eveningTimeOut: eveningTimeOut || null,
         status: "UPCOMING"
       })
       if (correctStatus === "CLOSED") {
@@ -348,6 +371,8 @@ export async function POST(request: NextRequest) {
         date: eventDate,
         timeIn: timeIn || "08:00",
         timeOut: timeOut || "17:00",
+        afternoonTimeOut: afternoonTimeOut || null,
+        eveningTimeOut: eveningTimeOut || null,
         status: "UPCOMING"
       })
     }
@@ -361,6 +386,10 @@ export async function POST(request: NextRequest) {
         organizer,
         timeIn,
         timeOut,
+        afternoonTimeIn: afternoonTimeIn || null,
+        afternoonTimeOut: afternoonTimeOut || null,
+        eveningTimeIn: eveningTimeIn || null,
+        eveningTimeOut: eveningTimeOut || null,
         status: correctStatus as any,
         type: (type?.toUpperCase() as any) || "REGULAR",
         parentEventId: parentEventId || null,
@@ -382,7 +411,7 @@ export async function POST(request: NextRequest) {
             userId: student.id,
             eventId: event.id,
             title: "New Event Created",
-            message: `${name} scheduled for ${eventDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${venue}. Time: ${timeIn} - ${timeOut}`,
+            message: `${name} scheduled for ${eventDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${venue}. Time: ${getTimeSummary({ timeIn, timeOut, afternoonTimeIn, afternoonTimeOut, eveningTimeIn, eveningTimeOut })}`,
             type: NotificationType.EVENT_CREATED
           }))
         })
@@ -406,7 +435,7 @@ export async function POST(request: NextRequest) {
             userId: officer.id,
             eventId: event.id,
             title: "Scan Assignment 📋",
-            message: `You are assigned to scan attendance for "${name}" on ${eventDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${venue}. Scanning window: ${timeIn} - ${timeOut}`,
+            message: `You are assigned to scan attendance for "${name}" on ${eventDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${venue}. Scanning window: ${getTimeSummary({ timeIn, timeOut, afternoonTimeIn, afternoonTimeOut, eveningTimeIn, eveningTimeOut })}`,
             type: NotificationType.SCAN_ASSIGNMENT
           }))
         })

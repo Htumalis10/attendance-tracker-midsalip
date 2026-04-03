@@ -61,6 +61,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { schoolId, name, email, phone, course, year, role, status } = body
 
+    // Validate School ID: exactly 8 digits
+    if (!schoolId || !/^\d{8}$/.test(schoolId)) {
+      return NextResponse.json(
+        { error: "School ID must be exactly 8 digits" },
+        { status: 400 }
+      )
+    }
+
+    // Validate email format
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: "Please provide a valid email address" },
+        { status: 400 }
+      )
+    }
+
+    // Validate phone number if provided: exactly 11 digits
+    if (phone && !/^\d{11}$/.test(phone)) {
+      return NextResponse.json(
+        { error: "Phone number must be exactly 11 digits" },
+        { status: 400 }
+      )
+    }
+
     // Check if user with same schoolId or email already exists
     const existingUser = await prisma.user.findFirst({
       where: {

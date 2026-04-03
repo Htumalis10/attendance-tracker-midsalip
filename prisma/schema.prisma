@@ -53,8 +53,12 @@ model Event {
   date          DateTime
   venue         String
   organizer     String
-  timeIn        String      // Expected time in (e.g., "08:00")
-  timeOut       String      // Expected time out (e.g., "12:00")
+  timeIn        String      // Morning/first period time in (e.g., "08:00")
+  timeOut       String      // Morning/first period time out (e.g., "12:00")
+  afternoonTimeIn  String?  // Afternoon time in (e.g., "13:00")
+  afternoonTimeOut String?  // Afternoon time out (e.g., "17:00")
+  eveningTimeIn    String?  // Evening time in (e.g., "18:00")
+  eveningTimeOut   String?  // Evening time out (e.g., "21:00")
   status        EventStatus @default(UPCOMING)
   type          EventType   @default(REGULAR)
   parentEventId String?     // For intramural games, links to parent intramural event
@@ -91,6 +95,10 @@ model AttendanceRecord {
   eventId       String
   timeIn        DateTime?
   timeOut       DateTime?
+  afternoonTimeIn  DateTime?
+  afternoonTimeOut DateTime?
+  eveningTimeIn    DateTime?
+  eveningTimeOut   DateTime?
   status        AttendanceStatus @default(PENDING)
   lateMinutes   Int?             // Minutes late if applicable
   approvedBy    String?          // Admin who approved/rejected

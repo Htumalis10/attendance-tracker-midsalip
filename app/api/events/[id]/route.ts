@@ -52,7 +52,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { name, description, date, venue, organizer, timeIn, timeOut, status } = body
+    const { name, description, date, venue, organizer, timeIn, timeOut, afternoonTimeIn, afternoonTimeOut, eveningTimeIn, eveningTimeOut, status } = body
 
     // Get the current event to check if status is changing
     const currentEvent = await prisma.event.findUnique({ where: { id } })
@@ -68,6 +68,10 @@ export async function PUT(
         organizer,
         timeIn,
         timeOut,
+        afternoonTimeIn: afternoonTimeIn !== undefined ? (afternoonTimeIn || null) : undefined,
+        afternoonTimeOut: afternoonTimeOut !== undefined ? (afternoonTimeOut || null) : undefined,
+        eveningTimeIn: eveningTimeIn !== undefined ? (eveningTimeIn || null) : undefined,
+        eveningTimeOut: eveningTimeOut !== undefined ? (eveningTimeOut || null) : undefined,
         status: status?.toUpperCase(),
       },
     })

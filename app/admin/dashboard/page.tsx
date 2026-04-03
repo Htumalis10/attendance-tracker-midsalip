@@ -27,6 +27,10 @@ interface Notification {
     venue: string
     timeIn: string
     timeOut: string
+    afternoonTimeIn?: string
+    afternoonTimeOut?: string
+    eveningTimeIn?: string
+    eveningTimeOut?: string
     status: string
   }
 }
@@ -142,6 +146,66 @@ export default function AdminDashboard() {
   }))
 
   if (isLoading) {
+    // SG Officer skeleton
+    if (isSGOfficer) {
+      return (
+        <div className="space-y-5 sm:space-y-6 lg:space-y-8">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <Skeleton className="h-8 w-52" />
+              <Skeleton className="h-4 w-72 mt-2" />
+            </div>
+            <Skeleton className="h-10 w-40 rounded-lg" />
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-card rounded-xl border border-border p-3 sm:p-4 flex flex-col items-center gap-2">
+                <Skeleton className="h-7 w-10" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+
+          {/* Section label */}
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-1 h-5 rounded-full" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+
+          {/* Assignment Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="bg-card rounded-xl border border-border overflow-hidden">
+                <Skeleton className="h-1 w-full" />
+                <div className="p-4 sm:p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Skeleton className="w-9 h-9 rounded-lg" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-2.5 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                  <div className="flex gap-4">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    // Admin skeleton
     return (
       <div className="space-y-4 sm:space-y-6 lg:space-y-8">
         <div>
@@ -279,6 +343,8 @@ export default function AdminDashboard() {
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
                   {notif.event.timeIn} - {notif.event.timeOut}
+                  {notif.event.afternoonTimeIn && ` | ${notif.event.afternoonTimeIn} - ${notif.event.afternoonTimeOut}`}
+                  {notif.event.eveningTimeIn && ` | ${notif.event.eveningTimeIn} - ${notif.event.eveningTimeOut}`}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5" />

@@ -29,20 +29,35 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
     setMounted(true)
     const currentUser = getCurrentUser()
     if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "sg_officer")) {
       router.push("/login")
+    } else {
+      setUser(currentUser)
     }
-    setUser(currentUser)
+    setAuthChecked(true)
 
     // Set dark mode as default
     if (!document.documentElement.classList.contains("dark")) {
       document.documentElement.classList.add("dark")
     }
-  }, [router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Don't render anything until auth is checked to prevent flash/redirect
+  if (!authChecked) {
+    return (
+      <div className="dark">
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </div>
+    )
+  }
 
   const handleLogout = () => {
     logout()
@@ -63,7 +78,7 @@ export default function AdminLayout({
     { href: "/admin/sync-status", label: "Sync Status", icon: Wifi, roles: ["admin"] },
   ]
 
-  const navItems = allNavItems.filter(item => !user || item.roles.includes(user.role))
+  const navItems = user ? allNavItems.filter(item => item.roles.includes(user.role)) : []
 
   return (
     <div className="dark">

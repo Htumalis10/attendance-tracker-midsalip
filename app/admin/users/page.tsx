@@ -160,6 +160,16 @@ export default function UserManagement() {
   // Handle add user
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Validate School ID: exactly 8 digits
+    if (!/^\d{8}$/.test(newUser.schoolId)) {
+      toast.error("School ID must be exactly 8 digits")
+      return
+    }
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
     try {
       const response = await fetch("/api/users", {
         method: "POST",
@@ -228,6 +238,11 @@ export default function UserManagement() {
   // Handle edit user
   const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editUser.email)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
     try {
       const response = await fetch(`/api/users/${editUser.id}`, {
         method: "PUT",
@@ -435,10 +450,19 @@ export default function UserManagement() {
                   type="text"
                   placeholder="e.g., 20240001"
                   value={newUser.schoolId}
-                  onChange={(e) => setNewUser({ ...newUser, schoolId: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 8)
+                    setNewUser({ ...newUser, schoolId: val })
+                  }}
                   required
+                  maxLength={8}
+                  pattern="\d{8}"
+                  title="School ID must be exactly 8 digits"
                   className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
                 />
+                {newUser.schoolId && newUser.schoolId.length !== 8 && (
+                  <p className="text-xs text-yellow-500 mt-1">{newUser.schoolId.length}/8 digits</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Full Name</label>
@@ -455,12 +479,31 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
                 <input
                   type="email"
-                  placeholder="Enter email"
+                  placeholder="Enter email (e.g., name@example.com)"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   required
                   className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Phone Number <span className="text-xs text-muted-foreground">(optional)</span></label>
+                <input
+                  type="tel"
+                  placeholder="e.g., 09171234567"
+                  value={newUser.phone}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 11)
+                    setNewUser({ ...newUser, phone: val })
+                  }}
+                  maxLength={11}
+                  pattern="\d{11}"
+                  title="Phone number must be 11 digits (e.g., 09171234567)"
+                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
+                />
+                {newUser.phone && newUser.phone.length !== 11 && (
+                  <p className="text-xs text-yellow-500 mt-1">{newUser.phone.length}/11 digits</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Course / Department</label>
@@ -544,6 +587,7 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
                 <input
                   type="email"
+                  placeholder="name@example.com"
                   value={editUser.email}
                   onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
                   required

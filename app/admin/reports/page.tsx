@@ -43,6 +43,10 @@ interface AttendanceRecord {
   }
   timeIn: string
   timeOut: string | null
+  afternoonTimeIn?: string | null
+  afternoonTimeOut?: string | null
+  eveningTimeIn?: string | null
+  eveningTimeOut?: string | null
   status: string
 }
 
@@ -388,10 +392,14 @@ export default function Reports() {
                     <td className="text-muted-foreground text-sm hidden md:table-cell">{record.event.name}</td>
                     <td className="text-sm">
                       <div>{record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                      {record.afternoonTimeIn && <div className="text-xs text-blue-500">PM: {new Date(record.afternoonTimeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>}
+                      {record.eveningTimeIn && <div className="text-xs text-violet-500">Eve: {new Date(record.eveningTimeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>}
                       <div className="sm:hidden text-xs text-muted-foreground">Out: {record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
                     </td>
                     <td className="text-sm hidden sm:table-cell">
-                      {record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                      <div>{record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                      {record.afternoonTimeOut && <div className="text-xs text-blue-500">PM: {new Date(record.afternoonTimeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>}
+                      {record.eveningTimeOut && <div className="text-xs text-violet-500">Eve: {new Date(record.eveningTimeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>}
                     </td>
                     <td>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${

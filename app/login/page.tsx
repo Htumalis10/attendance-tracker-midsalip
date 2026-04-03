@@ -225,13 +225,13 @@ export default function LoginPage() {
         </div>
 
         {/* Admin Access Link */}
-        <div className="text-center mt-3">
+        <div className="text-center mt-4">
           <button
             type="button"
             onClick={handleAdminAccess}
-            className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-600 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors flex items-center gap-1 mx-auto"
+            className="text-xs sm:text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 mx-auto px-4 py-2 rounded-lg border border-border/50 hover:border-primary/30 hover:bg-primary/5"
           >
-            <Lock className="w-3 h-3" />
+            <Lock className="w-3.5 h-3.5" />
             Admin Access
           </button>
         </div>

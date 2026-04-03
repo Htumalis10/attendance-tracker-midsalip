@@ -15,6 +15,10 @@ interface AttendanceRecord {
   id: string
   timeIn: string
   timeOut: string | null
+  afternoonTimeIn?: string | null
+  afternoonTimeOut?: string | null
+  eveningTimeIn?: string | null
+  eveningTimeOut?: string | null
   status: string
   event: {
     name: string
@@ -214,9 +218,15 @@ export default function ScanHistory() {
                   <td className="text-muted-foreground text-sm hidden sm:table-cell">{formatDate(record.event.date)}</td>
                   <td className="text-sm">
                     <div>{formatTime(record.timeIn)}</div>
+                    {record.afternoonTimeIn && <div className="text-xs text-blue-500">PM: {formatTime(record.afternoonTimeIn)}</div>}
+                    {record.eveningTimeIn && <div className="text-xs text-violet-500">Eve: {formatTime(record.eveningTimeIn)}</div>}
                     <div className="md:hidden text-xs text-muted-foreground">Out: {formatTime(record.timeOut)}</div>
                   </td>
-                  <td className="text-sm hidden md:table-cell">{formatTime(record.timeOut)}</td>
+                  <td className="text-sm hidden md:table-cell">
+                    <div>{formatTime(record.timeOut)}</div>
+                    {record.afternoonTimeOut && <div className="text-xs text-blue-500">PM: {formatTime(record.afternoonTimeOut)}</div>}
+                    {record.eveningTimeOut && <div className="text-xs text-violet-500">Eve: {formatTime(record.eveningTimeOut)}</div>}
+                  </td>
                   <td className="text-sm font-medium hidden md:table-cell">{calculateDuration(record.timeIn, record.timeOut)}</td>
                   <td>
                     {getStatus(record) === "Present" ? (

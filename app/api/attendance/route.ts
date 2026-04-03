@@ -56,7 +56,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { schoolId, userId, eventId, type, approvedBy, status } = body
+    const { schoolId, userId, eventId, type, approvedBy, status, period } = body
+
+    // Default period to "morning" for backward compatibility
+    const currentPeriod: "morning" | "afternoon" | "evening" = period || "morning"
 
     let targetUserId = userId
 
@@ -154,11 +157,17 @@ export async function POST(request: NextRequest) {
     })
 
     if (type === "time-in") {
-      if (existingRecord && existingRecord.timeIn) {
-        return NextResponse.json(
-          { error: "Already checked in for this event" },
-          { status: 400 }
-        )
+      // Check if already checked in for this period
+      if (existingRecord) {
+        const alreadyCheckedIn = currentPeriod === "morning" ? existingRecord.timeIn
+          : currentPeriod === "afternoon" ? existingRecord.afternoonTimeIn
+          : existingRecord.eveningTimeIn
+        if (alreadyCheckedIn) {
+          return NextResponse.json(
+            { error: `Already checked in for ${currentPeriod} period` },
+            { status: 400 }
+          )
+        }
       }
 
       // Get event to calculate late minutes
@@ -169,8 +178,15 @@ export async function POST(request: NextRequest) {
       let lateMinutes = 0
       let attendanceStatus = "PRESENT"
       
-      if (event && event.timeIn) {
-        const [eventHour, eventMinute] = event.timeIn.split(":").map(Number)
+      // Use the appropriate period's timeIn for late calculation
+      const periodTimeIn = event ? (
+        currentPeriod === "morning" ? event.timeIn
+        : currentPeriod === "afternoon" ? event.afternoonTimeIn
+        : event.eveningTimeIn
+      ) : null
+      
+      if (periodTimeIn) {
+        const [eventHour, eventMinute] = periodTimeIn.split(":").map(Number)
         const now = new Date()
         const eventTime = new Date()
         eventTime.setHours(eventHour, eventMinute, 0, 0)
@@ -185,6 +201,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Build the data object based on which period
+      const timeInField = currentPeriod === "morning" ? "timeIn"
+        : currentPeriod === "afternoon" ? "afternoonTimeIn"
+        : "eveningTimeIn"
+
       const record = await prisma.attendanceRecord.upsert({
         where: {
           userId_eventId: {
@@ -193,14 +214,14 @@ export async function POST(request: NextRequest) {
           },
         },
         update: {
-          timeIn: new Date(),
+          [timeInField]: new Date(),
           status: attendanceStatus,
           lateMinutes: lateMinutes > 0 ? lateMinutes : null,
         },
         create: {
           userId: targetUserId,
           eventId,
-          timeIn: new Date(),
+          [timeInField]: new Date(),
           status: attendanceStatus,
           lateMinutes: lateMinutes > 0 ? lateMinutes : null,
         },
@@ -212,12 +233,21 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(record, { status: 201 })
     } else if (type === "time-out") {
-      if (!existingRecord || !existingRecord.timeIn) {
+      // Check if student checked in for this period
+      const periodTimeInField = currentPeriod === "morning" ? "timeIn"
+        : currentPeriod === "afternoon" ? "afternoonTimeIn"
+        : "eveningTimeIn"
+      
+      if (!existingRecord || !existingRecord[periodTimeInField]) {
         return NextResponse.json(
-          { error: "Must check in first before checking out" },
+          { error: `Must check in for ${currentPeriod} period first` },
           { status: 400 }
         )
       }
+
+      const timeOutField = currentPeriod === "morning" ? "timeOut"
+        : currentPeriod === "afternoon" ? "afternoonTimeOut"
+        : "eveningTimeOut"
 
       const record = await prisma.attendanceRecord.update({
         where: {
@@ -227,7 +257,7 @@ export async function POST(request: NextRequest) {
           },
         },
         data: {
-          timeOut: new Date(),
+          [timeOutField]: new Date(),
           status: "PRESENT",
         },
         include: {

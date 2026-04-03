@@ -41,6 +41,10 @@ interface UpcomingEvent {
   venue: string
   timeIn: string
   timeOut: string
+  afternoonTimeIn?: string
+  afternoonTimeOut?: string
+  eveningTimeIn?: string
+  eveningTimeOut?: string
   status: string
 }
 
@@ -322,6 +326,8 @@ export default function StudentDashboard() {
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3" />
                       <span>{formatTimeDisplay(event.timeIn)} - {formatTimeDisplay(event.timeOut)}</span>
+                      {event.afternoonTimeIn && <span className="text-blue-500">| {formatTimeDisplay(event.afternoonTimeIn)} - {formatTimeDisplay(event.afternoonTimeOut || "")}</span>}
+                      {event.eveningTimeIn && <span className="text-violet-500">| {formatTimeDisplay(event.eveningTimeIn)} - {formatTimeDisplay(event.eveningTimeOut || "")}</span>}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3 h-3" />
