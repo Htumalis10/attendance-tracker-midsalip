@@ -301,7 +301,7 @@ export default function StudentCertificates() {
         </div>
         <div class="signature-block">
           <div class="signature-line"></div>
-          <div class="signature-label">Student President<br/><span style="font-size:11px;color:#718096;">${certificate.user?.course || 'Department'}</span></div>
+          <div class="signature-label">School Coordinator<br/><span style="font-size:11px;color:#718096;">${certificate.user?.course || 'Department'}</span></div>
         </div>
       </div>
       
