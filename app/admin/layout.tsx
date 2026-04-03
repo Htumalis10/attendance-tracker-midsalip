@@ -33,7 +33,7 @@ export default function AdminLayout({
   useEffect(() => {
     setMounted(true)
     const currentUser = getCurrentUser()
-    if (!currentUser || currentUser.role !== "admin") {
+    if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "sg_officer")) {
       router.push("/login")
     }
     setUser(currentUser)
@@ -49,16 +49,21 @@ export default function AdminLayout({
     router.push("/login")
   }
 
-  const navItems = [
-    { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/users", label: "User Management", icon: Users },
-    { href: "/admin/events", label: "Event Management", icon: Calendar },
-    { href: "/admin/qr-scanner", label: "QR Scanner", icon: QrCode },
-    { href: "/admin/attendance", label: "Attendance Monitoring", icon: Activity },
-    { href: "/admin/reports", label: "Reports", icon: FileText },
-    { href: "/admin/certificates", label: "Certificates", icon: Award },
-    { href: "/admin/sync-status", label: "Sync Status", icon: Wifi },
+  const isAdmin = user?.role === "admin"
+
+  // Full nav for admin, limited for SG Officers
+  const allNavItems = [
+    { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "sg_officer"] },
+    { href: "/admin/users", label: "User Management", icon: Users, roles: ["admin"] },
+    { href: "/admin/events", label: "Event Management", icon: Calendar, roles: ["admin"] },
+    { href: "/admin/qr-scanner", label: "QR Scanner", icon: QrCode, roles: ["sg_officer"] },
+    { href: "/admin/attendance", label: "Attendance Monitoring", icon: Activity, roles: ["admin"] },
+    { href: "/admin/reports", label: "Reports", icon: FileText, roles: ["admin"] },
+    { href: "/admin/certificates", label: "Certificates", icon: Award, roles: ["sg_officer"] },
+    { href: "/admin/sync-status", label: "Sync Status", icon: Wifi, roles: ["admin"] },
   ]
+
+  const navItems = allNavItems.filter(item => !user || item.roles.includes(user.role))
 
   return (
     <div className="dark">
@@ -85,7 +90,7 @@ export default function AdminLayout({
               </div>
               <div>
                 <span className="font-semibold text-sm bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">SmartCode</span>
-                <p className="text-[10px] text-sidebar-foreground/60 uppercase tracking-wider">Admin Panel</p>
+                <p className="text-[10px] text-sidebar-foreground/60 uppercase tracking-wider">{isAdmin ? "Admin Panel" : "SG Officer Panel"}</p>
               </div>
             </div>
             <button
@@ -140,7 +145,7 @@ export default function AdminLayout({
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex-1" />
-            <div className="text-sm text-muted-foreground truncate max-w-[150px] sm:max-w-none">{mounted && user ? user.name : "Admin Panel"}</div>
+            <div className="text-sm text-muted-foreground truncate max-w-[150px] sm:max-w-none">{mounted && user ? user.name : isAdmin ? "Admin Panel" : "SG Officer Panel"}</div>
           </div>
 
           {/* Page Content */}

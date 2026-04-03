@@ -1,6 +1,5 @@
 "use client"
 import { Download, FileText, ChevronDown, Loader2 } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { useState, useEffect } from "react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
@@ -30,13 +29,6 @@ interface Event {
   name: string
 }
 
-interface ReportData {
-  department: string
-  present: number
-  absent: number
-  late: number
-}
-
 interface AttendanceRecord {
   id: string
   user: {
@@ -55,14 +47,13 @@ interface AttendanceRecord {
 }
 
 export default function Reports() {
-  const [selectedEvent, setSelectedEvent] = useState("Select Event")
+  const [selectedEvent, setSelectedEvent] = useState("All Events")
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [selectedCourse, setSelectedCourse] = useState("All Courses")
   const [selectedYear, setSelectedYear] = useState("All Years")
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedReport, setGeneratedReport] = useState(false)
   const [events, setEvents] = useState<Event[]>([])
-  const [reportData, setReportData] = useState<ReportData[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -84,28 +75,19 @@ export default function Reports() {
 
   // Auto-generate report when filters change
   useEffect(() => {
-    if (selectedEventId) {
-      handleGenerateReport()
-    } else {
-      // Reset report when no event selected
-      setGeneratedReport(false)
-      setReportData([])
-      setAttendanceRecords([])
-    }
+    handleGenerateReport()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId, selectedCourse, selectedYear])
 
   const handleGenerateReport = async () => {
-    if (!selectedEventId) {
-      return
-    }
-
     setIsGenerating(true)
     setIsLoading(true)
     
     try {
       const params = new URLSearchParams()
-      params.set("eventId", selectedEventId)
+      if (selectedEventId) {
+        params.set("eventId", selectedEventId)
+      }
       if (selectedCourse !== "All Courses") {
         params.set("course", selectedCourse)
       }
@@ -117,30 +99,6 @@ export default function Reports() {
       if (response.ok) {
         const data = await response.json()
         setAttendanceRecords(data)
-
-        // Process data for chart
-        const departmentStats: Record<string, { present: number; absent: number; late: number }> = {}
-        
-        data.forEach((record: AttendanceRecord) => {
-          const dept = record.user.course || "Unknown"
-          if (!departmentStats[dept]) {
-            departmentStats[dept] = { present: 0, absent: 0, late: 0 }
-          }
-          if (record.status === "PRESENT") {
-            departmentStats[dept].present++
-          } else if (record.status === "ABSENT") {
-            departmentStats[dept].absent++
-          } else if (record.status === "LATE") {
-            departmentStats[dept].late++
-          }
-        })
-
-        const chartData = Object.entries(departmentStats).map(([department, stats]) => ({
-          department: department.length > 20 ? department.substring(0, 20) + "..." : department,
-          ...stats
-        }))
-
-        setReportData(chartData)
         setGeneratedReport(true)
         toast.success("Report generated successfully")
       }
@@ -155,7 +113,7 @@ export default function Reports() {
 
   const handleExportExcel = () => {
     if (!generatedReport || attendanceRecords.length === 0) {
-      toast.warning("Please generate a report first")
+      toast.warning("No records to export")
       return
     }
 
@@ -167,7 +125,7 @@ export default function Reports() {
       record.user.course || "N/A",
       record.user.year || "N/A",
       record.event.name,
-      new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
       record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
       record.status
     ])
@@ -187,7 +145,7 @@ export default function Reports() {
 
   const handleExportPDF = () => {
     if (!generatedReport || attendanceRecords.length === 0) {
-      toast.warning("Please generate a report first")
+      toast.warning("No records to export")
       return
     }
 
@@ -247,6 +205,7 @@ export default function Reports() {
         <th>School ID</th>
         <th>Course</th>
         <th>Year</th>
+        <th>Event</th>
         <th>Time-In</th>
         <th>Time-Out</th>
         <th>Status</th>
@@ -259,7 +218,8 @@ export default function Reports() {
           <td>${record.user.schoolId}</td>
           <td>${record.user.course || "N/A"}</td>
           <td>${record.user.year || "N/A"}</td>
-          <td>${new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
+          <td>${record.event.name}</td>
+          <td>${record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
           <td>${record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
           <td>${record.status}</td>
         </tr>
@@ -302,8 +262,8 @@ export default function Reports() {
                 <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-full">
-                <DropdownMenuItem onClick={() => { setSelectedEvent("Select Event"); setSelectedEventId(null); }}>
-                  Select Event
+                <DropdownMenuItem onClick={() => { setSelectedEvent("All Events"); setSelectedEventId(null); }}>
+                  All Events
                 </DropdownMenuItem>
                 {events.map(event => (
                   <DropdownMenuItem 
@@ -361,50 +321,93 @@ export default function Reports() {
         )}
       </div>
 
-      {/* Chart */}
-      <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
-        <h2 className="font-semibold text-foreground mb-3 sm:mb-4">Attendance by Department</h2>
+      {/* Summary Stats */}
+      {generatedReport && !isGenerating && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-card rounded-lg p-4 border border-border text-center">
+            <p className="text-2xl font-bold text-foreground">{attendanceRecords.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Records</p>
+          </div>
+          <div className="bg-card rounded-lg p-4 border border-green-500/20 text-center">
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{attendanceRecords.filter(r => r.status === "PRESENT").length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Present</p>
+          </div>
+          <div className="bg-card rounded-lg p-4 border border-yellow-500/20 text-center">
+            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{attendanceRecords.filter(r => r.status === "LATE").length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Late</p>
+          </div>
+          <div className="bg-card rounded-lg p-4 border border-red-500/20 text-center">
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{attendanceRecords.filter(r => r.status === "ABSENT").length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Absent</p>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Table */}
+      <div className="bg-card rounded-lg border border-border overflow-hidden">
+        <div className="p-4 sm:p-6 border-b border-border">
+          <h2 className="font-semibold text-foreground">Attendance Records</h2>
+        </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            <span className="ml-2 text-muted-foreground">Loading chart data...</span>
+            <span className="ml-2 text-muted-foreground">Loading records...</span>
           </div>
-        ) : reportData.length > 0 ? (
-          <div className="h-[300px] sm:h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={reportData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="department" stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} />
-              <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "10px" }} tick={{ fontSize: 10 }} allowDecimals={false} />
-              <Tooltip
-                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  color: "hsl(var(--foreground))",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                }}
-                labelStyle={{
-                  color: "hsl(var(--foreground))",
-                  fontWeight: "600",
-                  marginBottom: "4px",
-                }}
-                itemStyle={{
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: "12px" }} />
-              <Bar dataKey="present" fill="var(--primary)" name="Present" />
-              <Bar dataKey="absent" fill="var(--destructive)" name="Absent" />
-              <Bar dataKey="late" fill="var(--accent)" name="Late" />
-            </BarChart>
-          </ResponsiveContainer>
+        ) : attendanceRecords.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            No attendance records found
           </div>
         ) : (
-          <div className="text-center py-12 text-muted-foreground">
-            Select an event to automatically generate the report
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr className="bg-muted">
+                  <th>#</th>
+                  <th>Name</th>
+                  <th className="hidden sm:table-cell">School ID</th>
+                  <th className="hidden md:table-cell">Course</th>
+                  <th className="hidden lg:table-cell">Year</th>
+                  <th className="hidden md:table-cell">Event</th>
+                  <th>Time-In</th>
+                  <th className="hidden sm:table-cell">Time-Out</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceRecords.map((record, index) => (
+                  <tr key={record.id}>
+                    <td className="text-muted-foreground text-sm">{index + 1}</td>
+                    <td className="font-medium text-foreground">
+                      <div>{record.user.name}</div>
+                      <div className="sm:hidden text-xs text-muted-foreground">{record.user.schoolId}</div>
+                      <div className="md:hidden text-xs text-muted-foreground">{record.event.name}</div>
+                    </td>
+                    <td className="font-mono text-sm text-primary hidden sm:table-cell">{record.user.schoolId}</td>
+                    <td className="text-muted-foreground text-sm hidden md:table-cell">{record.user.course || "N/A"}</td>
+                    <td className="text-muted-foreground text-sm hidden lg:table-cell">{record.user.year || "N/A"}</td>
+                    <td className="text-muted-foreground text-sm hidden md:table-cell">{record.event.name}</td>
+                    <td className="text-sm">
+                      <div>{record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                      <div className="sm:hidden text-xs text-muted-foreground">Out: {record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
+                    </td>
+                    <td className="text-sm hidden sm:table-cell">
+                      {record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </td>
+                    <td>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        record.status === "PRESENT" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+                        record.status === "LATE" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
+                        record.status === "ABSENT" ? "bg-red-500/10 text-red-600 dark:text-red-400" :
+                        record.status === "INSIDE" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                        "bg-gray-500/10 text-gray-600 dark:text-gray-400"
+                      }`}>
+                        ● {record.status.charAt(0) + record.status.slice(1).toLowerCase()}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

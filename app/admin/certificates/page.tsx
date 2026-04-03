@@ -14,6 +14,7 @@ interface Certificate {
   user: {
     name: string
     schoolId: string
+    course: string | null
   }
   event: {
     name: string
@@ -23,13 +24,12 @@ interface Certificate {
 interface Event {
   id: string
   name: string
+  status: string
 }
 
 export default function CertificateGenerator() {
-  const [selectedEvent, setSelectedEvent] = useState("Select Event")
+  const [selectedEvent, setSelectedEvent] = useState("All Events")
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const [selectedCriteria, setSelectedCriteria] = useState("Time-In & Time-Out")
-  const [isGenerating, setIsGenerating] = useState(false)
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -72,51 +72,6 @@ export default function CertificateGenerator() {
     }
     fetchCertificates()
   }, [selectedEventId])
-
-  // Auto-generate certificates when event or criteria changes
-  useEffect(() => {
-    if (selectedEventId) {
-      handleGenerateCertificates()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEventId, selectedCriteria])
-
-  const handleGenerateCertificates = async () => {
-    if (!selectedEventId) {
-      return
-    }
-
-    setIsGenerating(true)
-    try {
-      const response = await fetch("/api/certificates/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: selectedEventId,
-          criteria: selectedCriteria
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || "Failed to generate certificates")
-      }
-
-      const result = await response.json()
-      toast.success(`Successfully generated ${result.count} certificates for ${selectedEvent}`)
-      
-      // Refresh certificates list
-      const certResponse = await fetch(`/api/certificates?eventId=${selectedEventId}`)
-      if (certResponse.ok) {
-        const data = await certResponse.json()
-        setCertificates(data)
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setIsGenerating(false)
-    }
-  }
 
   const handleDownloadCertificate = async (certificate: Certificate) => {
     try {
@@ -348,7 +303,7 @@ export default function CertificateGenerator() {
         </div>
         <div class="signature-block">
           <div class="signature-line"></div>
-          <div class="signature-label">School Administrator</div>
+          <div class="signature-label">Student President<br/><span style="font-size:11px;color:#718096;">${certificate.user.course || 'Department'}</span></div>
         </div>
       </div>
       
@@ -371,57 +326,45 @@ export default function CertificateGenerator() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title">Certificate Generator</h1>
-          <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">Auto-generate and manage attendance certificates</p>
+          <h1 className="page-title">Certificates</h1>
+          <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">Certificates are auto-generated when events are completed</p>
         </div>
       </div>
 
-      {/* Generate Certificates Form */}
+      {/* Filter */}
       <div className="bg-card rounded-lg p-4 sm:p-6 border border-border">
-        <h2 className="font-semibold text-foreground mb-3 sm:mb-4">Generate Certificates for Event</h2>
+        <h2 className="font-semibold text-foreground mb-3 sm:mb-4">Filter Certificates</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Select Event</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Event</label>
             <DropdownMenu>
               <DropdownMenuTrigger className="w-full px-3 sm:px-4 py-2 rounded-lg bg-background border border-border text-foreground text-left flex items-center justify-between hover:bg-muted transition-colors text-sm">
                 <span className="truncate">{selectedEvent}</span>
                 <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-full">
-                {events.map(event => (
-                  <DropdownMenuItem 
-                    key={event.id} 
-                    onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
-                  >
-                    {event.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Criteria</label>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="w-full px-3 sm:px-4 py-2 rounded-lg bg-background border border-border text-foreground text-left flex items-center justify-between hover:bg-muted transition-colors text-sm">
-                <span className="truncate">{selectedCriteria}</span>
-                <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-full">
-                <DropdownMenuItem onClick={() => setSelectedCriteria("Time-In & Time-Out")}>
-                  Time-In & Time-Out
+                <DropdownMenuItem onClick={() => { setSelectedEvent("All Events"); setSelectedEventId(null); }}>
+                  All Events
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSelectedCriteria("Time-In Only")}>Time-In Only</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSelectedCriteria("All Attendees")}>All Attendees</DropdownMenuItem>
+                {events.filter(e => e.status === "CLOSED").length === 0 ? (
+                  <DropdownMenuItem disabled>
+                    No completed events available
+                  </DropdownMenuItem>
+                ) : (
+                  events.filter(e => e.status === "CLOSED").map(event => (
+                    <DropdownMenuItem 
+                      key={event.id} 
+                      onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
+                    >
+                      {event.name}
+                    </DropdownMenuItem>
+                  ))
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
+            <p className="text-xs text-muted-foreground mt-1">Filter by completed event or view all</p>
           </div>
         </div>
-        {isGenerating && (
-          <div className="flex items-center gap-2 mt-3">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Auto-generating certificates...</span>
-          </div>
-        )}
       </div>
 
       {/* Certificates Table */}
@@ -433,7 +376,7 @@ export default function CertificateGenerator() {
           </div>
         ) : certificates.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            No certificates found. Select an event to automatically generate certificates.
+            No certificates yet. Certificates are automatically generated when events are completed.
           </div>
         ) : (
           <div className="overflow-x-auto">

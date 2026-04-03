@@ -277,6 +277,16 @@ export async function GET(request: NextRequest) {
             certificates: true,
           },
         },
+        games: {
+          include: {
+            _count: {
+              select: {
+                attendanceRecords: true,
+              },
+            },
+          },
+          orderBy: { date: "asc" },
+        },
       },
     })
 
@@ -291,9 +301,45 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, description, date, venue, organizer, timeIn, timeOut, status } = body
+    const { name, description, date, venue, organizer, timeIn, timeOut, status, type, parentEventId } = body
 
     const eventDate = new Date(date)
+    
+    // Block creating events with past dates (prevent recreating finished events)
+    // Use UTC components from the event date (since "YYYY-MM-DD" parses as UTC midnight)
+    // and compare with local date components for the server's "today"
+    const now = new Date()
+    const todayYear = now.getFullYear()
+    const todayMonth = now.getMonth()
+    const todayDay = now.getDate()
+    
+    const eventYear = eventDate.getUTCFullYear()
+    const eventMonth = eventDate.getUTCMonth()
+    const eventDayNum = eventDate.getUTCDate()
+    
+    const isEventInPast = 
+      eventYear < todayYear ||
+      (eventYear === todayYear && eventMonth < todayMonth) ||
+      (eventYear === todayYear && eventMonth === todayMonth && eventDayNum < todayDay)
+    
+    if (isEventInPast) {
+      return NextResponse.json({ error: "Cannot create events with past dates. The event date has already passed." }, { status: 400 })
+    }
+    
+    const isEventToday = eventYear === todayYear && eventMonth === todayMonth && eventDayNum === todayDay
+    
+    // If the event is today, check if the timeOut has already passed
+    if (isEventToday) {
+      const correctStatus = getCorrectEventStatus({
+        date: eventDate,
+        timeIn: timeIn || "08:00",
+        timeOut: timeOut || "17:00",
+        status: "UPCOMING"
+      })
+      if (correctStatus === "CLOSED") {
+        return NextResponse.json({ error: "Cannot create events that have already ended. The event time has passed." }, { status: 400 })
+      }
+    }
     
     // Determine correct status based on date/time
     let correctStatus = status?.toUpperCase() || "UPCOMING"
@@ -316,6 +362,8 @@ export async function POST(request: NextRequest) {
         timeIn,
         timeOut,
         status: correctStatus as any,
+        type: (type?.toUpperCase() as any) || "REGULAR",
+        parentEventId: parentEventId || null,
       },
     })
 
@@ -343,6 +391,29 @@ export async function POST(request: NextRequest) {
     } catch (notifError) {
       console.error("Error creating notifications:", notifError)
       // Don't fail the event creation if notifications fail
+    }
+
+    // Notify SG Officers about scan assignment
+    try {
+      const sgOfficers = await prisma.user.findMany({
+        where: { role: "SG_OFFICER", status: "ACTIVE" },
+        select: { id: true }
+      })
+
+      if (sgOfficers.length > 0) {
+        await prisma.notification.createMany({
+          data: sgOfficers.map(officer => ({
+            userId: officer.id,
+            eventId: event.id,
+            title: "Scan Assignment 📋",
+            message: `You are assigned to scan attendance for "${name}" on ${eventDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} at ${venue}. Scanning window: ${timeIn} - ${timeOut}`,
+            type: NotificationType.SCAN_ASSIGNMENT
+          }))
+        })
+        console.log(`Notified ${sgOfficers.length} SG Officers about scan assignment`)
+      }
+    } catch (notifError) {
+      console.error("Error notifying SG Officers:", notifError)
     }
 
     return NextResponse.json(event, { status: 201 })

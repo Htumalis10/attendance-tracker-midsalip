@@ -5,15 +5,27 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { LogIn, User, ShieldCheck } from "lucide-react"
+import { LogIn, User, ShieldCheck, Lock } from "lucide-react"
 import { authenticateUser, setCurrentUser } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [role, setRole] = useState<"admin" | "student">("student")
+  const [role, setRole] = useState<"sg_officer" | "student">("student")
   const [id, setId] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
+  const handleAdminAccess = () => {
+    // Admin gets direct access without login
+    setCurrentUser({
+      id: "admin",
+      schoolId: "ADMIN",
+      name: "Administrator",
+      email: "admin@zdspgc.edu.ph",
+      role: "admin",
+    })
+    router.push("/admin/dashboard")
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,7 +34,8 @@ export default function LoginPage() {
 
     try {
       if (!id.trim()) {
-        setError(`Please enter your ${role === "admin" ? "Admin" : "Student"} ID`)
+        const label = role === "sg_officer" ? "SG Officer" : "Student"
+        setError(`Please enter your ${label} ID`)
         setIsLoading(false)
         return
       }
@@ -31,7 +44,8 @@ export default function LoginPage() {
       const user = await authenticateUser(id.trim().toUpperCase(), role)
 
       if (!user) {
-        setError(`Invalid ${role === "admin" ? "Admin" : "Student"} ID. Please check and try again.`)
+        const label = role === "sg_officer" ? "SG Officer" : "Student"
+        setError(`Invalid ${label} ID. Please check and try again.`)
         setIsLoading(false)
         return
       }
@@ -39,7 +53,7 @@ export default function LoginPage() {
       // Set user and redirect
       setCurrentUser(user)
 
-      if (role === "admin") {
+      if (role === "sg_officer") {
         router.push("/admin/qr-scanner")
       } else {
         router.push("/student/profile")
@@ -129,7 +143,7 @@ export default function LoginPage() {
                     value="student"
                     checked={role === "student"}
                     onChange={(e) => {
-                      setRole(e.target.value as "admin" | "student")
+                      setRole(e.target.value as "sg_officer" | "student")
                       setError("")
                     }}
                     className="sr-only"
@@ -142,24 +156,24 @@ export default function LoginPage() {
                 </label>
                 <label
                   className={`relative flex items-center justify-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-lg sm:rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                    role === "admin"
+                    role === "sg_officer"
                       ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400"
                       : "border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-500"
                   }`}
                 >
                   <input
                     type="radio"
-                    value="admin"
-                    checked={role === "admin"}
+                    value="sg_officer"
+                    checked={role === "sg_officer"}
                     onChange={(e) => {
-                      setRole(e.target.value as "admin" | "student")
+                      setRole(e.target.value as "sg_officer" | "student")
                       setError("")
                     }}
                     className="sr-only"
                   />
                   <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="font-medium text-sm sm:text-base">Admin</span>
-                  {role === "admin" && (
+                  <span className="font-medium text-sm sm:text-base">SG Officer</span>
+                  {role === "sg_officer" && (
                     <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 bg-emerald-500 rounded-full" />
                   )}
                 </label>
@@ -169,12 +183,12 @@ export default function LoginPage() {
             {/* ID Input */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {role === "admin" ? "Admin ID" : "Student Number"}
+                {role === "sg_officer" ? "SG Officer ID" : "Student Number"}
               </label>
               <div className="relative">
                 <input
-                  type={role === "admin" ? "password" : "text"}
-                  placeholder={role === "admin" ? "e.g., ADMIN123" : "e.g., 20240001"}
+                  type="text"
+                  placeholder={role === "sg_officer" ? "e.g., SGO001" : "e.g., 20240001"}
                   value={id}
                   onChange={(e) => {
                     setId(e.target.value)
@@ -208,6 +222,18 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+        </div>
+
+        {/* Admin Access Link */}
+        <div className="text-center mt-3">
+          <button
+            type="button"
+            onClick={handleAdminAccess}
+            className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-600 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors flex items-center gap-1 mx-auto"
+          >
+            <Lock className="w-3 h-3" />
+            Admin Access
+          </button>
         </div>
 
         {/* Footer */}

@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Camera, X, CheckCircle, AlertCircle, Clock, User, ChevronDown, Loader2, QrCode, Volume2, VolumeX, Wifi, WifiOff, CloudOff, RotateCcw, Trash2 } from "lucide-react"
+import { Camera, X, CheckCircle, AlertCircle, Clock, User, ChevronDown, Loader2, QrCode, Volume2, VolumeX, Wifi, WifiOff, CloudOff, RotateCcw, Trash2, Lock, Calendar, MapPin } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Scanner } from "@yudiel/react-qr-scanner"
 import { toast } from "sonner"
 import { formatTimeDisplay } from "@/lib/time-utils"
+import { getCurrentUser } from "@/lib/auth"
 import { 
   isOnline, 
   setupSyncListeners, 
@@ -40,6 +41,8 @@ interface Event {
   timeIn: string
   timeOut: string
   date: string
+  type?: string
+  parentEventId?: string | null
 }
 
 interface UserData {
@@ -48,6 +51,17 @@ interface UserData {
   name: string
   course: string | null
   year: string | null
+  role: string
+}
+
+interface UpcomingEvent {
+  id: string
+  name: string
+  date: string
+  venue: string
+  timeIn: string
+  timeOut: string
+  status: string
 }
 
 // Helper to get today's date key for localStorage
@@ -74,6 +88,16 @@ export default function QRScanner() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [scanMode, setScanMode] = useState<"time-in" | "time-out">("time-in")
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [isSGOfficer, setIsSGOfficer] = useState(false)
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
+
+  // Check if user is SG Officer
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (user?.role === "sg_officer") {
+      setIsSGOfficer(true)
+    }
+  }, [])
 
   // Load scan history from localStorage on mount (client-side only)
   useEffect(() => {
@@ -317,9 +341,22 @@ export default function QRScanner() {
         setEvents(data)
         
         // Auto-select first active event only on initial load or if no event selected
+        // Skip parent intramural events (they are just containers)
         if (isInitial && data.length > 0 && !selectedEventId) {
-          setSelectedEvent(data[0].name)
-          setSelectedEventId(data[0].id)
+          const scannableEvents = data.filter((e: Event) => !(e.type === "INTRAMURAL" && !e.parentEventId))
+          if (scannableEvents.length > 0) {
+            setSelectedEvent(scannableEvents[0].name)
+            setSelectedEventId(scannableEvents[0].id)
+          }
+        }
+      }
+
+      // For SG Officers, also fetch upcoming events to show schedule when locked
+      if (isSGOfficer) {
+        const upRes = await fetch("/api/events?status=UPCOMING")
+        if (upRes.ok) {
+          const upData = await upRes.json()
+          setUpcomingEvents(upData)
         }
       }
     } catch (err) {
@@ -520,6 +557,13 @@ export default function QRScanner() {
       }
 
       const student = users[0]
+
+      // Only students can have attendance recorded
+      if (student.role !== "STUDENT") {
+        setScanError(`${student.name} is not a student. Attendance is only for students.`)
+        playBeep(false)
+        return
+      }
       
       // For time-out, check if student has checked in first
       let missedTimeIn = false
@@ -782,6 +826,127 @@ export default function QRScanner() {
     }
   }
 
+  // SG Officer lock screen — scanner is locked until an event is ACTIVE
+  if (isSGOfficer && events.length === 0) {
+    // Find the next upcoming event to show countdown
+    const sortedUpcoming = [...upcomingEvents]
+      .filter(e => e.status === "UPCOMING")
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    // Calculate countdown for the nearest event today
+    const getCountdown = (event: UpcomingEvent) => {
+      const eventDate = new Date(event.date)
+      const eventYear = eventDate.getUTCFullYear()
+      const eventMonth = eventDate.getUTCMonth()
+      const eventDay = eventDate.getUTCDate()
+      const todayYear = currentTime.getFullYear()
+      const todayMonth = currentTime.getMonth()
+      const todayDay = currentTime.getDate()
+      const isToday = eventYear === todayYear && eventMonth === todayMonth && eventDay === todayDay
+
+      if (!isToday) return null
+
+      const [h, m] = event.timeIn.split(":").map(Number)
+      const startTime = new Date(todayYear, todayMonth, todayDay, h, m, 0)
+      const diff = startTime.getTime() - currentTime.getTime()
+      if (diff <= 0) return null
+
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const secs = Math.floor((diff % (1000 * 60)) / 1000)
+
+      if (hours > 0) return `${hours}h ${mins}m ${secs}s`
+      if (mins > 0) return `${mins}m ${secs}s`
+      return `${secs}s`
+    }
+
+    const nextEvent = sortedUpcoming[0] || null
+    const countdown = nextEvent ? getCountdown(nextEvent) : null
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
+        <div className="bg-card rounded-2xl border border-border/50 p-6 sm:p-10 max-w-lg w-full text-center space-y-6">
+          {/* Lock Icon */}
+          <div className="relative mx-auto w-20 h-20 sm:w-24 sm:h-24">
+            <div className="absolute inset-0 bg-orange-500/20 rounded-full animate-pulse" />
+            <div className="relative w-full h-full rounded-full bg-orange-500/10 flex items-center justify-center">
+              <Lock className="w-10 h-10 sm:w-12 sm:h-12 text-orange-500" />
+            </div>
+          </div>
+
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground">Scanner Locked</h1>
+            <p className="text-muted-foreground text-sm mt-2">
+              The QR scanner will automatically unlock when an event starts
+            </p>
+          </div>
+
+          {/* Countdown for today's next event */}
+          {countdown && nextEvent && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+              <p className="text-emerald-600 dark:text-emerald-400 text-xs font-medium uppercase tracking-wider mb-1">Unlocks in</p>
+              <p className="text-emerald-600 dark:text-emerald-400 text-2xl sm:text-3xl font-mono font-bold">{countdown}</p>
+              <p className="text-emerald-600/70 dark:text-emerald-400/70 text-xs mt-1">{nextEvent.name}</p>
+            </div>
+          )}
+
+          {/* Upcoming Events Schedule */}
+          {sortedUpcoming.length > 0 ? (
+            <div className="text-left space-y-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary" />
+                Upcoming Events
+              </h3>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {sortedUpcoming.slice(0, 5).map((event) => {
+                  const eventDate = new Date(event.date)
+                  const isToday = eventDate.toDateString() === new Date().toDateString()
+                  return (
+                    <div
+                      key={event.id}
+                      className={`p-3 rounded-lg border text-sm ${
+                        isToday
+                          ? "bg-primary/5 border-primary/20"
+                          : "bg-muted/30 border-border/50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="font-medium text-foreground">{event.name}</p>
+                        {isToday && (
+                          <span className="text-[10px] bg-primary/10 text-primary font-semibold px-1.5 py-0.5 rounded-full">TODAY</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {eventDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {event.timeIn} - {event.timeOut}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {event.venue}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground/60 text-xs">No upcoming events scheduled</p>
+          )}
+
+          <p className="text-muted-foreground/40 text-[10px]">
+            This page auto-refreshes every 10 seconds
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -953,12 +1118,12 @@ export default function QRScanner() {
                     <ChevronDown className="w-4 h-4" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-full">
-                    {events.map((event) => (
+                    {events.filter(e => !(e.type === "INTRAMURAL" && !e.parentEventId)).map((event) => (
                       <DropdownMenuItem 
                         key={event.id} 
                         onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
                       >
-                        {event.name}
+                        {event.parentEventId ? `🏆 ${event.name}` : event.name}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>

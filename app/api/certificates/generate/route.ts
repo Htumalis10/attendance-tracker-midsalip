@@ -11,6 +11,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Event ID is required" }, { status: 400 })
     }
 
+    // Check if event is completed (CLOSED) before generating certificates
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { status: true, name: true }
+    })
+
+    if (!event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 })
+    }
+
+    if (event.status !== "CLOSED") {
+      return NextResponse.json({ error: "Certificates can only be generated for completed events. This event is still " + event.status.toLowerCase() + "." }, { status: 400 })
+    }
+
     // Get attendance records based on criteria
     let whereCondition: any = { eventId }
     

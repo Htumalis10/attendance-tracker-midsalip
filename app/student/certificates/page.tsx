@@ -16,6 +16,10 @@ interface Certificate {
     name: string
     date: string
   }
+  user: {
+    name: string
+    course: string | null
+  }
 }
 
 export default function StudentCertificates() {
@@ -297,7 +301,7 @@ export default function StudentCertificates() {
         </div>
         <div class="signature-block">
           <div class="signature-line"></div>
-          <div class="signature-label">School Administrator</div>
+          <div class="signature-label">Student President<br/><span style="font-size:11px;color:#718096;">${certificate.user?.course || 'Department'}</span></div>
         </div>
       </div>
       

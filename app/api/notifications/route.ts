@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
             venue: true,
             timeIn: true,
             timeOut: true,
+            status: true,
           },
         },
       },

@@ -34,6 +34,7 @@ model User {
 
 enum Role {
   ADMIN
+  SG_OFFICER
   STUDENT
   FACULTY
   STAFF
@@ -46,17 +47,23 @@ enum Status {
 
 // Event model
 model Event {
-  id          String      @id @default(cuid())
-  name        String
-  description String?     @db.Text
-  date        DateTime
-  venue       String
-  organizer   String
-  timeIn      String      // Expected time in (e.g., "08:00")
-  timeOut     String      // Expected time out (e.g., "12:00")
-  status      EventStatus @default(UPCOMING)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id            String      @id @default(cuid())
+  name          String
+  description   String?     @db.Text
+  date          DateTime
+  venue         String
+  organizer     String
+  timeIn        String      // Expected time in (e.g., "08:00")
+  timeOut       String      // Expected time out (e.g., "12:00")
+  status        EventStatus @default(UPCOMING)
+  type          EventType   @default(REGULAR)
+  parentEventId String?     // For intramural games, links to parent intramural event
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Self-relation for intramural games
+  parentEvent Event?  @relation("IntramuralsGames", fields: [parentEventId], references: [id], onDelete: Cascade)
+  games       Event[] @relation("IntramuralsGames")
 
   // Relations
   attendanceRecords AttendanceRecord[]
@@ -64,6 +71,11 @@ model Event {
   notifications     Notification[]
 
   @@map("events")
+}
+
+enum EventType {
+  REGULAR
+  INTRAMURAL
 }
 
 enum EventStatus {
@@ -169,4 +181,5 @@ enum NotificationType {
   EVENT_REMINDER
   ATTENDANCE_CONFIRMED
   CERTIFICATE_AVAILABLE
+  SCAN_ASSIGNMENT
 }

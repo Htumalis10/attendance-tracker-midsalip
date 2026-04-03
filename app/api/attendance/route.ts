@@ -69,11 +69,28 @@ export async function POST(request: NextRequest) {
       if (!user) {
         return NextResponse.json({ error: "User not found" }, { status: 404 })
       }
+
+      // Only students can have attendance recorded
+      if (user.role !== "STUDENT") {
+        return NextResponse.json({ error: "Attendance is only for students" }, { status: 403 })
+      }
+
       targetUserId = user.id
     }
 
     if (!targetUserId) {
       return NextResponse.json({ error: "userId or schoolId is required" }, { status: 400 })
+    }
+
+    // Verify user is a student when userId is provided directly
+    if (targetUserId) {
+      const user = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { role: true }
+      })
+      if (user && user.role !== "STUDENT") {
+        return NextResponse.json({ error: "Attendance is only for students" }, { status: 403 })
+      }
     }
 
     // Simple create attendance record (for QR scanner approve flow)
@@ -264,5 +281,47 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error processing attendance:", error)
     return NextResponse.json({ error: "Failed to process attendance" }, { status: 500 })
+  }
+}
+
+// PATCH /api/attendance - Edit attendance status (only for CLOSED events)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { recordId, status } = body
+
+    if (!recordId || !status) {
+      return NextResponse.json({ error: "recordId and status are required" }, { status: 400 })
+    }
+
+    // Get the record and check if its event is CLOSED
+    const existingRecord = await prisma.attendanceRecord.findUnique({
+      where: { id: recordId },
+      include: { event: true }
+    })
+
+    if (!existingRecord) {
+      return NextResponse.json({ error: "Attendance record not found" }, { status: 404 })
+    }
+
+    if (existingRecord.event.status !== "CLOSED") {
+      return NextResponse.json({ error: "Attendance can only be edited for completed events" }, { status: 403 })
+    }
+
+    const validStatuses = ["PRESENT", "LATE", "ABSENT"]
+    if (!validStatuses.includes(status.toUpperCase())) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+    }
+
+    const record = await prisma.attendanceRecord.update({
+      where: { id: recordId },
+      data: { status: status.toUpperCase() },
+      include: { user: true, event: true }
+    })
+
+    return NextResponse.json(record)
+  } catch (error) {
+    console.error("Error updating attendance:", error)
+    return NextResponse.json({ error: "Failed to update attendance" }, { status: 500 })
   }
 }

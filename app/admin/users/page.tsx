@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Plus, Search, Edit, Trash2, Eye, Loader2, X, Download } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
@@ -14,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { getCurrentUser } from "@/lib/auth"
 import { QRCodeSVG } from "qrcode.react"
 
 // Course options
@@ -79,6 +81,16 @@ interface User {
 }
 
 export default function UserManagement() {
+  const router = useRouter()
+
+  // Admin-only page guard
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (user && user.role !== "admin") {
+      router.push("/admin/dashboard")
+    }
+  }, [router])
+
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -291,6 +303,7 @@ export default function UserManagement() {
 
   // Format role display
   const formatRole = (role: string) => {
+    if (role === "SG_OFFICER") return "SG Officer"
     return role.charAt(0) + role.slice(1).toLowerCase()
   }
 
@@ -327,8 +340,7 @@ export default function UserManagement() {
             <SelectContent>
               <SelectItem value="All Roles">All Roles</SelectItem>
               <SelectItem value="Student">Student</SelectItem>
-              <SelectItem value="Faculty">Faculty</SelectItem>
-              <SelectItem value="Staff">Staff</SelectItem>
+              <SelectItem value="Sg_officer">SG Officer</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -467,10 +479,10 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Year / Position</label>
                 <Select value={newUser.year} onValueChange={(value) => setNewUser({ ...newUser, year: value })}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder={newUser.role === "STUDENT" ? "Select year" : "Select position"} />
+                    <SelectValue placeholder={(newUser.role === "STUDENT" || newUser.role === "SG_OFFICER") ? "Select year" : "Select position"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {(newUser.role === "STUDENT" ? STUDENT_YEARS : POSITIONS).map((item) => (
+                    {((newUser.role === "STUDENT" || newUser.role === "SG_OFFICER") ? STUDENT_YEARS : POSITIONS).map((item) => (
                       <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
@@ -484,8 +496,7 @@ export default function UserManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="STUDENT">Student</SelectItem>
-                    <SelectItem value="FACULTY">Faculty</SelectItem>
-                    <SelectItem value="STAFF">Staff</SelectItem>
+                    <SelectItem value="SG_OFFICER">SG Officer</SelectItem>
                     <SelectItem value="ADMIN">Admin</SelectItem>
                   </SelectContent>
                 </Select>
@@ -565,10 +576,10 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Year / Position</label>
                 <Select value={editUser.year} onValueChange={(value) => setEditUser({ ...editUser, year: value })}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder={editUser.role === "STUDENT" ? "Select year" : "Select position"} />
+                    <SelectValue placeholder={(editUser.role === "STUDENT" || editUser.role === "SG_OFFICER") ? "Select year" : "Select position"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {(editUser.role === "STUDENT" ? STUDENT_YEARS : POSITIONS).map((item) => (
+                    {((editUser.role === "STUDENT" || editUser.role === "SG_OFFICER") ? STUDENT_YEARS : POSITIONS).map((item) => (
                       <SelectItem key={item} value={item}>{item}</SelectItem>
                     ))}
                   </SelectContent>
@@ -583,8 +594,7 @@ export default function UserManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="STUDENT">Student</SelectItem>
-                      <SelectItem value="FACULTY">Faculty</SelectItem>
-                      <SelectItem value="STAFF">Staff</SelectItem>
+                      <SelectItem value="SG_OFFICER">SG Officer</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
                     </SelectContent>
                   </Select>

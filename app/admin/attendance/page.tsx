@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, Download, ChevronDown, Loader2, X, CalendarIcon } from "lucide-react"
+import { Search, Filter, Download, ChevronDown, Loader2, X, CalendarIcon, Edit2, Check } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -23,12 +23,16 @@ interface AttendanceRecord {
   }
   event: {
     name: string
+    status: string
   }
 }
 
 interface Event {
   id: string
   name: string
+  status: string
+  type?: string
+  parentEventId?: string | null
 }
 
 export default function AttendanceMonitoring() {
@@ -41,6 +45,43 @@ export default function AttendanceMonitoring() {
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>("All")
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined)
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
+  const [editingStatus, setEditingStatus] = useState<string>("")
+
+  // Check if the selected event is closed (allows editing)
+  const isSelectedEventClosed = () => {
+    if (!selectedEventId) return false
+    const event = events.find(e => e.id === selectedEventId)
+    return event?.status === "CLOSED"
+  }
+
+  // Handle editing attendance status
+  const handleEditStatus = async (recordId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/attendance`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordId,
+          status: newStatus,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to update status")
+      }
+      
+      // Update local state
+      setAttendanceRecords(prev => prev.map(r => 
+        r.id === recordId ? { ...r, status: newStatus } : r
+      ))
+      setEditingRecordId(null)
+      toast.success("Attendance status updated")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update attendance status")
+    }
+  }
 
   // Fetch events
   useEffect(() => {
@@ -224,6 +265,18 @@ export default function AttendanceMonitoring() {
         </div>
       </div>
 
+      {/* Event status info */}
+      {selectedEventId && !isSelectedEventClosed() && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm">
+          <p className="text-blue-700 dark:text-blue-400">View-only mode — Attendance can only be edited after the event is completed.</p>
+        </div>
+      )}
+      {selectedEventId && isSelectedEventClosed() && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-sm">
+          <p className="text-green-700 dark:text-green-400">Event completed — You can edit attendance records.</p>
+        </div>
+      )}
+
       {/* Attendance Table */}
       <div className="bg-card rounded-lg border border-border overflow-hidden">
         {isLoading ? (
@@ -244,6 +297,7 @@ export default function AttendanceMonitoring() {
                 <th>Time-In</th>
                 <th className="hidden sm:table-cell">Time-Out</th>
                 <th>Status</th>
+                {isSelectedEventClosed() && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -261,7 +315,43 @@ export default function AttendanceMonitoring() {
                     <div className="sm:hidden text-xs text-muted-foreground">Out: {formatTime(record.timeOut)}</div>
                   </td>
                   <td className="text-sm hidden sm:table-cell">{formatTime(record.timeOut)}</td>
-                  <td>{getStatusBadge(record.status)}</td>
+                  <td>
+                    {editingRecordId === record.id ? (
+                      <Select value={editingStatus} onValueChange={setEditingStatus}>
+                        <SelectTrigger className="w-28 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PRESENT">Present</SelectItem>
+                          <SelectItem value="LATE">Late</SelectItem>
+                          <SelectItem value="ABSENT">Absent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      getStatusBadge(record.status)
+                    )}
+                  </td>
+                  {isSelectedEventClosed() && (
+                    <td>
+                      {editingRecordId === record.id ? (
+                        <button
+                          onClick={() => handleEditStatus(record.id, editingStatus)}
+                          className="action-button btn-ghost text-sm p-1 text-green-600 hover:bg-green-500/10"
+                          title="Save"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { setEditingRecordId(record.id); setEditingStatus(record.status) }}
+                          className="action-button btn-ghost text-sm p-1 text-primary hover:bg-primary/10"
+                          title="Edit status (event completed)"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

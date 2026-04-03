@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Wifi, WifiOff, RotateCcw, Loader2, CloudOff, Trash2, Clock, User, Calendar, Smartphone, Laptop, Monitor, Tablet, Globe } from "lucide-react"
 import { toast } from "sonner"
+import { getCurrentUser } from "@/lib/auth"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +43,16 @@ interface ScannerDevice {
 }
 
 export default function SyncStatus() {
+  const router = useRouter()
+
+  // Admin-only page guard
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (user && user.role !== "admin") {
+      router.push("/admin/dashboard")
+    }
+  }, [router])
+
   const [syncing, setSyncing] = useState(false)
   const [syncingDevice, setSyncingDevice] = useState<string | null>(null)
   const [devices, setDevices] = useState<ScannerDevice[]>([])

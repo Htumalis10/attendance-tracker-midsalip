@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon, WifiOff, Wifi } from "lucide-react"
 import { toast } from "sonner"
+import { getCurrentUser } from "@/lib/auth"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
@@ -31,14 +33,27 @@ interface Event {
   timeIn: string
   timeOut: string
   status: string
+  type: string
+  parentEventId?: string | null
   createdAt: string
   _count?: {
     attendanceRecords: number
     certificates: number
   }
+  games?: Event[]
 }
 
 export default function EventManagement() {
+  const router = useRouter()
+
+  // Admin-only page guard
+  useEffect(() => {
+    const user = getCurrentUser()
+    if (user && user.role !== "admin") {
+      router.push("/admin/dashboard")
+    }
+  }, [router])
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -58,15 +73,103 @@ export default function EventManagement() {
     timeIn: "",
     timeOut: "",
     status: "UPCOMING",
+    type: "REGULAR" as "REGULAR" | "INTRAMURAL",
   })
+  
+  // Games for intramural events
+  const [intramuralGames, setIntramuralGames] = useState<{name: string, timeIn: string, timeOut: string}[]>([])
   
   // Form state for editing event
   const [editEventDate, setEditEventDate] = useState<Date | undefined>(undefined)
+
+  // Offline state
+  const [isOnline, setIsOnline] = useState(true)
+  const OFFLINE_EVENTS_KEY = "smartcode_offline_events"
+
+  // Monitor online/offline status
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const handleOnline = () => {
+      setIsOnline(true)
+      toast.success("Back online! Syncing offline events...")
+      syncOfflineEvents()
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      toast.warning("You're offline. Events will be saved locally.")
+    }
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
+
+  // Save event to offline queue
+  const saveEventOffline = (eventData: any) => {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_EVENTS_KEY) || "[]")
+    queue.push({ ...eventData, offlineId: `offline_${Date.now()}`, createdAt: new Date().toISOString() })
+    localStorage.setItem(OFFLINE_EVENTS_KEY, JSON.stringify(queue))
+  }
+
+  // Sync offline events when back online
+  const syncOfflineEvents = async () => {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_EVENTS_KEY) || "[]")
+    if (queue.length === 0) return
+
+    let synced = 0
+    const remaining: any[] = []
+
+    for (const eventData of queue) {
+      try {
+        const { offlineId, createdAt, ...data } = eventData
+        const response = await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        })
+        if (response.ok) {
+          synced++
+        } else {
+          remaining.push(eventData)
+        }
+      } catch {
+        remaining.push(eventData)
+      }
+    }
+
+    localStorage.setItem(OFFLINE_EVENTS_KEY, JSON.stringify(remaining))
+    if (synced > 0) {
+      toast.success(`Synced ${synced} offline event${synced > 1 ? "s" : ""}`)
+      fetchEvents()
+    }
+    if (remaining.length > 0) {
+      toast.warning(`${remaining.length} event${remaining.length > 1 ? "s" : ""} still pending sync`)
+    }
+  }
+
+  // Try to sync on mount if online
+  useEffect(() => {
+    if (navigator.onLine) {
+      syncOfflineEvents()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Fetch events from API
   const fetchEvents = async () => {
     try {
       setIsLoading(true)
+      if (!navigator.onLine) {
+        // Show offline pending events count
+        const offlineQueue = JSON.parse(localStorage.getItem(OFFLINE_EVENTS_KEY) || "[]")
+        if (offlineQueue.length > 0) {
+          toast.info(`${offlineQueue.length} event${offlineQueue.length > 1 ? "s" : ""} pending sync`)
+        }
+        setIsLoading(false)
+        return
+      }
       const response = await fetch("/api/events")
       if (!response.ok) throw new Error("Failed to fetch events")
       const data = await response.json()
@@ -115,13 +218,76 @@ export default function EventManagement() {
         ...newEvent,
         date: newEvent.date ? format(newEvent.date, "yyyy-MM-dd") : "",
       }
+
+      if (!isOnline) {
+        // Save offline
+        saveEventOffline(eventData)
+        
+        // If intramural, also queue the games
+        if (newEvent.type === "INTRAMURAL" && intramuralGames.length > 0) {
+          for (const game of intramuralGames) {
+            saveEventOffline({
+              name: game.name,
+              date: newEvent.date ? format(newEvent.date, "yyyy-MM-dd") : "",
+              venue: newEvent.venue,
+              organizer: newEvent.organizer,
+              timeIn: game.timeIn,
+              timeOut: game.timeOut,
+              type: "INTRAMURAL",
+              _pendingParent: true,
+            })
+          }
+        }
+
+        setShowAddModal(false)
+        setNewEvent({
+          name: "",
+          description: "",
+          date: undefined,
+          venue: "",
+          organizer: "",
+          timeIn: "",
+          timeOut: "",
+          status: "UPCOMING",
+          type: "REGULAR",
+        })
+        setIntramuralGames([])
+        toast.success("Event saved offline. Will sync when back online.")
+        return
+      }
+
       const response = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(eventData),
       })
 
-      if (!response.ok) throw new Error("Failed to create event")
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to create event")
+      }
+
+      const createdEvent = await response.json()
+      
+      // If intramural, create games as child events
+      if (newEvent.type === "INTRAMURAL" && intramuralGames.length > 0) {
+        for (const game of intramuralGames) {
+          await fetch("/api/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: game.name,
+              date: newEvent.date ? format(newEvent.date, "yyyy-MM-dd") : "",
+              venue: newEvent.venue,
+              organizer: newEvent.organizer,
+              timeIn: game.timeIn,
+              timeOut: game.timeOut,
+              type: "INTRAMURAL",
+              parentEventId: createdEvent.id,
+            }),
+          })
+        }
+      }
 
       setShowAddModal(false)
       setNewEvent({
@@ -133,11 +299,13 @@ export default function EventManagement() {
         timeIn: "",
         timeOut: "",
         status: "UPCOMING",
+        type: "REGULAR",
       })
+      setIntramuralGames([])
       toast.success("Event created successfully")
       fetchEvents()
-    } catch (err) {
-      toast.error("Failed to create event")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create event")
     }
   }
 
@@ -188,7 +356,15 @@ export default function EventManagement() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Event Management</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="page-title">Event Management</h1>
+            {!isOnline && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                <WifiOff className="w-3 h-3" />
+                Offline
+              </span>
+            )}
+          </div>
           <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
             Create and manage events, assign scanners, and control attendance periods
           </p>
@@ -230,7 +406,7 @@ export default function EventManagement() {
         <div className="text-center py-12 text-muted-foreground">No events found. Create your first event!</div>
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {events.map((event) => (
+        {events.filter(e => !e.parentEventId).map((event) => (
           <div
             key={event.id}
             className={`bg-card rounded-lg border p-6 hover:border-primary/50 transition-colors ${
@@ -239,11 +415,16 @@ export default function EventManagement() {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-foreground text-lg">{event.name}</h3>
                   {isNewEvent(event.createdAt) && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary text-primary-foreground animate-pulse">
                       New
+                    </span>
+                  )}
+                  {event.type === "INTRAMURAL" && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                      Intramural
                     </span>
                   )}
                 </div>
@@ -287,6 +468,27 @@ export default function EventManagement() {
               </div>
             </div>
 
+            {/* Intramural Games list */}
+            {event.type === "INTRAMURAL" && event.games && event.games.length > 0 && (
+              <div className="mb-4 space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Games ({event.games.length})</p>
+                {event.games.map((game) => (
+                  <div key={game.id} className="flex items-center justify-between bg-muted/50 p-2 rounded text-xs">
+                    <span className="font-medium text-foreground">{game.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{formatTimeDisplay(game.timeIn)} - {formatTimeDisplay(game.timeOut)}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        game.status === "ACTIVE" ? "bg-green-500/10 text-green-600" 
+                        : game.status === "CLOSED" ? "bg-gray-500/10 text-gray-600" 
+                        : "bg-blue-500/10 text-blue-600"
+                      }`}>{game.status?.toLowerCase()}</span>
+                      <span className="text-muted-foreground">{game._count?.attendanceRecords || 0} att.</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <button
                 onClick={() => handleManageEvent(event)}
@@ -316,6 +518,33 @@ export default function EventManagement() {
               onSubmit={handleCreateEvent}
               className="space-y-4"
             >
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Event Type</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setNewEvent({ ...newEvent, type: "REGULAR" }); setIntramuralGames([]) }}
+                    className={`flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      newEvent.type === "REGULAR" 
+                        ? "bg-primary text-primary-foreground border-primary" 
+                        : "bg-background border-border text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Regular
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewEvent({ ...newEvent, type: "INTRAMURAL" })}
+                    className={`flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      newEvent.type === "INTRAMURAL" 
+                        ? "bg-orange-500 text-white border-orange-500" 
+                        : "bg-background border-border text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    Intramural
+                  </button>
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Event Name</label>
                 <input
@@ -356,6 +585,13 @@ export default function EventManagement() {
                         mode="single"
                         selected={newEvent.date}
                         onSelect={(date) => setNewEvent({ ...newEvent, date })}
+                        disabled={(date) => {
+                          const d = new Date(date)
+                          d.setHours(0, 0, 0, 0)
+                          const today = new Date()
+                          today.setHours(0, 0, 0, 0)
+                          return d < today
+                        }}
                         initialFocus
                       />
                     </PopoverContent>
@@ -389,6 +625,73 @@ export default function EventManagement() {
                   />
                 </div>
               </div>
+              {/* Intramural Games Section */}
+              {newEvent.type === "INTRAMURAL" && (
+                <div className="border border-orange-500/20 rounded-lg p-3 space-y-3 bg-orange-500/5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-foreground">Games</label>
+                    <button
+                      type="button"
+                      onClick={() => setIntramuralGames([...intramuralGames, { name: "", timeIn: "", timeOut: "" }])}
+                      className="text-xs text-orange-600 dark:text-orange-400 font-medium hover:underline"
+                    >
+                      + Add Game
+                    </button>
+                  </div>
+                  {intramuralGames.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No games added. Each game will have separate attendance tracking.</p>
+                  )}
+                  {intramuralGames.map((game, index) => (
+                    <div key={index} className="flex flex-col gap-2 bg-background p-2 rounded border border-border">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder={`Game ${index + 1} name`}
+                          value={game.name}
+                          onChange={(e) => {
+                            const updated = [...intramuralGames]
+                            updated[index].name = e.target.value
+                            setIntramuralGames(updated)
+                          }}
+                          className="flex-1 px-3 py-1.5 rounded bg-background border border-border text-foreground text-sm"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setIntramuralGames(intramuralGames.filter((_, i) => i !== index))}
+                          className="p-1 text-destructive hover:bg-destructive/10 rounded"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Time-In</label>
+                          <TimePicker
+                            value={game.timeIn}
+                            onChange={(value) => {
+                              const updated = [...intramuralGames]
+                              updated[index].timeIn = value
+                              setIntramuralGames(updated)
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                          <TimePicker
+                            value={game.timeOut}
+                            onChange={(value) => {
+                              const updated = [...intramuralGames]
+                              updated[index].timeOut = value
+                              setIntramuralGames(updated)
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 action-button btn-ghost">
                   Cancel

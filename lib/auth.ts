@@ -11,13 +11,13 @@ export interface User {
   id: string
   schoolId: string
   name: string
-  role: "admin" | "student"
+  role: "admin" | "sg_officer" | "student"
   email: string
   profile?: StudentProfile
 }
 
 // Authenticate user via API
-export async function authenticateUser(id: string, role: "admin" | "student"): Promise<User | null> {
+export async function authenticateUser(id: string, role: "admin" | "sg_officer" | "student"): Promise<User | null> {
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -40,7 +40,7 @@ export async function authenticateUser(id: string, role: "admin" | "student"): P
 }
 
 // Synchronous authentication for backward compatibility (uses local storage cache)
-export function authenticateUserSync(id: string, role: "admin" | "student"): User | null {
+export function authenticateUserSync(id: string, role: "admin" | "sg_officer" | "student"): User | null {
   // This is a fallback that checks if user exists in localStorage
   // Real authentication should use the async version
   const cachedUsers = localStorage.getItem("smartcode_cached_users")
