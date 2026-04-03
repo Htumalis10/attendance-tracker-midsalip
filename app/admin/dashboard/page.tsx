@@ -127,12 +127,12 @@ export default function AdminDashboard() {
   ]
 
   const statusColorMap: Record<string, string> = {
-    PRESENT: "oklch(0.68 0.14 145)",
-    APPROVED: "oklch(0.68 0.14 145)",
-    ABSENT: "oklch(0.6 0.24 27)",
-    LATE: "oklch(0.78 0.11 85)",
-    PENDING: "oklch(0.7 0.1 220)",
-    REJECTED: "oklch(0.5 0.2 27)",
+    PRESENT: "#22c55e",
+    APPROVED: "#22c55e",
+    ABSENT: "#ef4444",
+    LATE: "#f59e0b",
+    PENDING: "#3b82f6",
+    REJECTED: "#f97316",
   }
 
   const statusData = attendanceByStatus.map(item => ({
@@ -541,18 +541,20 @@ export default function AdminDashboard() {
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
+                  backgroundColor: "#1a1a2e",
+                  border: "1px solid #2a2a3e",
                   borderRadius: "8px",
                   fontSize: "12px",
-                  color: "hsl(var(--foreground))",
-                  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                  color: "#f1f1f1",
+                  boxShadow: "0 8px 16px rgba(0, 0, 0, 0.4)",
+                  padding: "8px 12px",
                 }}
                 labelStyle={{
-                  color: "hsl(var(--foreground))",
+                  color: "#f1f1f1",
+                  fontWeight: 600,
                 }}
                 itemStyle={{
-                  color: "hsl(var(--foreground))",
+                  color: "#d1d5db",
                 }}
               />
             </PieChart>

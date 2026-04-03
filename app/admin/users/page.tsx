@@ -551,15 +551,6 @@ export default function UserManagement() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Phone</label>
-                <input
-                  type="text"
-                  value={editUser.phone}
-                  onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
-                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Course / Department</label>
                 <Select value={editUser.course} onValueChange={(value) => setEditUser({ ...editUser, course: value })}>
                   <SelectTrigger className="w-full">
