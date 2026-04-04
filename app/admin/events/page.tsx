@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon, WifiOff, Wifi } from "lucide-react"
+import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon, WifiOff, Wifi, Trophy, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import { getCurrentUser } from "@/lib/auth"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -84,9 +84,12 @@ export default function EventManagement() {
     type: "REGULAR" as "REGULAR" | "INTRAMURAL",
   })
   
-  // Games for intramural events
-  const [intramuralGames, setIntramuralGames] = useState<{name: string, timeIn: string, timeOut: string}[]>([])
+  // Games for multi-activity events
+  const [intramuralGames, setIntramuralGames] = useState<{name: string, timeIn: string, timeOut: string, afternoonTimeIn: string, afternoonTimeOut: string, eveningTimeIn: string, eveningTimeOut: string}[]>([])
   
+  // Track expanded game lists
+  const [expandedGames, setExpandedGames] = useState<Record<string, boolean>>({})
+
   // Form state for editing event
   const [editEventDate, setEditEventDate] = useState<Date | undefined>(undefined)
 
@@ -231,7 +234,7 @@ export default function EventManagement() {
         // Save offline
         saveEventOffline(eventData)
         
-        // If intramural, also queue the games
+        // If multi-activity, also queue the games
         if (newEvent.type === "INTRAMURAL" && intramuralGames.length > 0) {
           for (const game of intramuralGames) {
             saveEventOffline({
@@ -241,6 +244,10 @@ export default function EventManagement() {
               organizer: newEvent.organizer,
               timeIn: game.timeIn,
               timeOut: game.timeOut,
+              afternoonTimeIn: game.afternoonTimeIn || undefined,
+              afternoonTimeOut: game.afternoonTimeOut || undefined,
+              eveningTimeIn: game.eveningTimeIn || undefined,
+              eveningTimeOut: game.eveningTimeOut || undefined,
               type: "INTRAMURAL",
               _pendingParent: true,
             })
@@ -281,7 +288,7 @@ export default function EventManagement() {
 
       const createdEvent = await response.json()
       
-      // If intramural, create games as child events
+      // If multi-activity, create games as child events
       if (newEvent.type === "INTRAMURAL" && intramuralGames.length > 0) {
         for (const game of intramuralGames) {
           await fetch("/api/events", {
@@ -294,6 +301,10 @@ export default function EventManagement() {
               organizer: newEvent.organizer,
               timeIn: game.timeIn,
               timeOut: game.timeOut,
+              afternoonTimeIn: game.afternoonTimeIn || undefined,
+              afternoonTimeOut: game.afternoonTimeOut || undefined,
+              eveningTimeIn: game.eveningTimeIn || undefined,
+              eveningTimeOut: game.eveningTimeOut || undefined,
               type: "INTRAMURAL",
               parentEventId: createdEvent.id,
             }),
@@ -329,13 +340,69 @@ export default function EventManagement() {
     if (!selectedEvent) return
 
     try {
+      // Extract games data from formData
+      const { games, ...eventFormData } = formData
+
       const response = await fetch(`/api/events/${selectedEvent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(eventFormData),
       })
 
       if (!response.ok) throw new Error("Failed to update event")
+
+      // Handle games CRUD for multi-activity events
+      if (selectedEvent.type === "INTRAMURAL" && games) {
+        const existingGames = selectedEvent.games || []
+        const existingIds = existingGames.map(g => g.id)
+        
+        // Delete removed games
+        for (const existing of existingGames) {
+          if (!games.find((g: any) => g.id === existing.id)) {
+            await fetch(`/api/events/${existing.id}`, { method: "DELETE" })
+          }
+        }
+        
+        // Update existing games and create new ones
+        for (const game of games) {
+          if (game.id && existingIds.includes(game.id)) {
+            // Update existing game
+            await fetch(`/api/events/${game.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: game.name,
+                timeIn: game.timeIn,
+                timeOut: game.timeOut,
+                afternoonTimeIn: game.afternoonTimeIn || null,
+                afternoonTimeOut: game.afternoonTimeOut || null,
+                eveningTimeIn: game.eveningTimeIn || null,
+                eveningTimeOut: game.eveningTimeOut || null,
+              }),
+            })
+          } else {
+            // Create new game
+            await fetch("/api/events", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: game.name,
+                date: eventFormData.date || selectedEvent.date,
+                venue: selectedEvent.venue,
+                organizer: selectedEvent.organizer,
+                timeIn: game.timeIn,
+                timeOut: game.timeOut,
+                afternoonTimeIn: game.afternoonTimeIn || undefined,
+                afternoonTimeOut: game.afternoonTimeOut || undefined,
+                eveningTimeIn: game.eveningTimeIn || undefined,
+                eveningTimeOut: game.eveningTimeOut || undefined,
+                type: "INTRAMURAL",
+                parentEventId: selectedEvent.id,
+              }),
+            })
+          }
+        }
+      }
 
       setShowEditModal(false)
       setSelectedEvent(null)
@@ -440,7 +507,7 @@ export default function EventManagement() {
                   )}
                   {event.type === "INTRAMURAL" && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                      Intramural
+                      Multi-Activity
                     </span>
                   )}
                 </div>
@@ -510,24 +577,63 @@ export default function EventManagement() {
               )}
             </div>
 
-            {/* Intramural Games list */}
+            {/* Games list */}
             {event.type === "INTRAMURAL" && event.games && event.games.length > 0 && (
-              <div className="mb-4 space-y-1">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Games ({event.games.length})</p>
-                {event.games.map((game) => (
-                  <div key={game.id} className="flex items-center justify-between bg-muted/50 p-2 rounded text-xs">
-                    <span className="font-medium text-foreground">{game.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">{formatTimeDisplay(game.timeIn)} - {formatTimeDisplay(game.timeOut)}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        game.status === "ACTIVE" ? "bg-green-500/10 text-green-600" 
-                        : game.status === "CLOSED" ? "bg-gray-500/10 text-gray-600" 
-                        : "bg-blue-500/10 text-blue-600"
-                      }`}>{game.status?.toLowerCase()}</span>
-                      <span className="text-muted-foreground">{game._count?.attendanceRecords || 0} att.</span>
+              <div className="mb-4 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setExpandedGames(prev => ({ ...prev, [event.id]: !prev[event.id] }))}
+                  className="flex items-center gap-1.5 w-full text-left group"
+                >
+                  <Trophy className="w-3.5 h-3.5 text-orange-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Games ({event.games.length})
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {event.games.reduce((sum, g) => sum + (g._count?.attendanceRecords || 0), 0)} total att.
+                  </span>
+                  {expandedGames[event.id] ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </button>
+                {expandedGames[event.id] && event.games.map((game) => (
+                  <div key={game.id} className="bg-orange-500/5 border border-orange-500/10 p-2 rounded text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground">{game.name}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          game.status === "ACTIVE" ? "bg-green-500/10 text-green-600 dark:text-green-400" 
+                          : game.status === "CLOSED" ? "bg-gray-500/10 text-gray-600 dark:text-gray-400" 
+                          : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        }`}>{game.status?.toLowerCase()}</span>
+                      </div>
+                      <span className="font-medium text-foreground">{game._count?.attendanceRecords || 0} att.</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
+                      <span><span className="text-blue-400 font-medium">AM:</span> {formatTimeDisplay(game.timeIn)} - {formatTimeDisplay(game.timeOut)}</span>
+                      {game.afternoonTimeIn && game.afternoonTimeOut && (
+                        <span><span className="text-orange-400 font-medium">PM:</span> {formatTimeDisplay(game.afternoonTimeIn)} - {formatTimeDisplay(game.afternoonTimeOut)}</span>
+                      )}
+                      {game.eveningTimeIn && game.eveningTimeOut && (
+                        <span><span className="text-violet-400 font-medium">EVE:</span> {formatTimeDisplay(game.eveningTimeIn)} - {formatTimeDisplay(game.eveningTimeOut)}</span>
+                      )}
                     </div>
                   </div>
                 ))}
+                {!expandedGames[event.id] && (
+                  <div className="flex flex-wrap gap-1">
+                    {event.games.slice(0, 3).map((game) => (
+                      <span key={game.id} className="px-2 py-0.5 bg-orange-500/5 border border-orange-500/10 rounded text-[10px] text-foreground">
+                        {game.name}
+                      </span>
+                    ))}
+                    {event.games.length > 3 && (
+                      <span className="px-2 py-0.5 text-[10px] text-muted-foreground">+{event.games.length - 3} more</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -583,7 +689,7 @@ export default function EventManagement() {
                         : "bg-background border-border text-foreground hover:bg-muted"
                     }`}
                   >
-                    Intramural
+                    Multi-Activity
                   </button>
                 </div>
               </div>
@@ -699,14 +805,14 @@ export default function EventManagement() {
                   />
                 </div>
               </div>
-              {/* Intramural Games Section */}
+              {/* Multi-Activity Games Section */}
               {newEvent.type === "INTRAMURAL" && (
                 <div className="border border-orange-500/20 rounded-lg p-3 space-y-3 bg-orange-500/5">
                   <div className="flex items-center justify-between">
                     <label className="block text-sm font-medium text-foreground">Games</label>
                     <button
                       type="button"
-                      onClick={() => setIntramuralGames([...intramuralGames, { name: "", timeIn: "", timeOut: "" }])}
+                      onClick={() => setIntramuralGames([...intramuralGames, { name: "", timeIn: "", timeOut: "", afternoonTimeIn: "", afternoonTimeOut: "", eveningTimeIn: "", eveningTimeOut: "" }])}
                       className="text-xs text-orange-600 dark:text-orange-400 font-medium hover:underline"
                     >
                       + Add Game
@@ -738,28 +844,85 @@ export default function EventManagement() {
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground">Time-In</label>
-                          <TimePicker
-                            value={game.timeIn}
-                            onChange={(value) => {
-                              const updated = [...intramuralGames]
-                              updated[index].timeIn = value
-                              setIntramuralGames(updated)
-                            }}
-                          />
+                      <div>
+                        <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-In</label>
+                            <TimePicker
+                              value={game.timeIn}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].timeIn = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                            <TimePicker
+                              value={game.timeOut}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].timeOut = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                          <TimePicker
-                            value={game.timeOut}
-                            onChange={(value) => {
-                              const updated = [...intramuralGames]
-                              updated[index].timeOut = value
-                              setIntramuralGames(updated)
-                            }}
-                          />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-In</label>
+                            <TimePicker
+                              value={game.afternoonTimeIn}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].afternoonTimeIn = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                            <TimePicker
+                              value={game.afternoonTimeOut}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].afternoonTimeOut = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-In</label>
+                            <TimePicker
+                              value={game.eveningTimeIn}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].eveningTimeIn = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                            <TimePicker
+                              value={game.eveningTimeOut}
+                              onChange={(value) => {
+                                const updated = [...intramuralGames]
+                                updated[index].eveningTimeOut = value
+                                setIntramuralGames(updated)
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -841,6 +1004,13 @@ function EditEventModal({
     eveningTimeOut: event.eveningTimeOut || "",
   })
   
+  // Games state for multi-activity events
+  const [editGames, setEditGames] = useState<{id?: string, name: string, timeIn: string, timeOut: string, afternoonTimeIn: string, afternoonTimeOut: string, eveningTimeIn: string, eveningTimeOut: string}[]>(
+    event.type === "INTRAMURAL" && event.games
+      ? event.games.map(g => ({ id: g.id, name: g.name, timeIn: g.timeIn, timeOut: g.timeOut, afternoonTimeIn: g.afternoonTimeIn || "", afternoonTimeOut: g.afternoonTimeOut || "", eveningTimeIn: g.eveningTimeIn || "", eveningTimeOut: g.eveningTimeOut || "" }))
+      : []
+  )
+  
   // Check if event is active or closed (started)
   const isEventStarted = event.status === "ACTIVE" || event.status === "CLOSED"
   
@@ -856,6 +1026,7 @@ function EditEventModal({
     onSave({
       ...formData,
       date: editEventDate ? format(editEventDate, "yyyy-MM-dd") : event.date,
+      games: event.type === "INTRAMURAL" ? editGames : undefined,
     })
   }
 
@@ -863,7 +1034,14 @@ function EditEventModal({
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
       <div className="bg-card rounded-t-lg sm:rounded-lg p-4 sm:p-6 w-full sm:max-w-lg border border-border max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg sm:text-xl font-bold text-foreground">Edit Event</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">Edit Event</h2>
+            {event.type === "INTRAMURAL" && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                Multi-Activity
+              </span>
+            )}
+          </div>
           <span className={`px-2 py-1 rounded text-xs font-medium ${
             event.status === "ACTIVE" 
               ? "bg-green-500/10 text-green-600 dark:text-green-400" 
@@ -1005,6 +1183,140 @@ function EditEventModal({
               </div>
             </div>
           </div>
+          
+          {/* Games Management */}
+          {event.type === "INTRAMURAL" && (
+            <div className="border border-orange-500/20 rounded-lg p-3 space-y-3 bg-orange-500/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4 text-orange-500" />
+                  <label className="block text-sm font-medium text-foreground">Games</label>
+                  <span className="text-xs text-muted-foreground">({editGames.length})</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditGames([...editGames, { name: "", timeIn: "", timeOut: "", afternoonTimeIn: "", afternoonTimeOut: "", eveningTimeIn: "", eveningTimeOut: "" }])}
+                  className="text-xs text-orange-600 dark:text-orange-400 font-medium hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Game
+                </button>
+              </div>
+              {editGames.length === 0 && (
+                <p className="text-xs text-muted-foreground">No games added yet. Add games for separate attendance tracking per activity.</p>
+              )}
+              {editGames.map((game, index) => (
+                <div key={game.id || `new-${index}`} className="flex flex-col gap-2 bg-background p-2.5 rounded border border-border">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={`Game ${index + 1} name`}
+                      value={game.name}
+                      onChange={(e) => {
+                        const updated = [...editGames]
+                        updated[index] = { ...updated[index], name: e.target.value }
+                        setEditGames(updated)
+                      }}
+                      className="flex-1 px-3 py-1.5 rounded bg-background border border-border text-foreground text-sm"
+                      required
+                    />
+                    {game.id && (
+                      <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">saved</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditGames(editGames.filter((_, i) => i !== index))}
+                      className="p-1 text-destructive hover:bg-destructive/10 rounded"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-In</label>
+                        <TimePicker
+                          value={game.timeIn}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], timeIn: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                        <TimePicker
+                          value={game.timeOut}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], timeOut: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-In</label>
+                        <TimePicker
+                          value={game.afternoonTimeIn}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], afternoonTimeIn: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                        <TimePicker
+                          value={game.afternoonTimeOut}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], afternoonTimeOut: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-In</label>
+                        <TimePicker
+                          value={game.eveningTimeIn}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], eveningTimeIn: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                        <TimePicker
+                          value={game.eveningTimeOut}
+                          onChange={(value) => {
+                            const updated = [...editGames]
+                            updated[index] = { ...updated[index], eveningTimeOut: value }
+                            setEditGames(updated)
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="flex gap-3 pt-2">
             <button
               type="button"

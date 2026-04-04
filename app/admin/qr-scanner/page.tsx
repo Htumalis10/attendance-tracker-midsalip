@@ -420,7 +420,7 @@ export default function QRScanner() {
         setEvents(data)
         
         // Auto-select first active event only on initial load or if no event selected
-        // Skip parent intramural events (they are just containers)
+        // Skip parent multi-activity events (they are just containers)
         if (isInitial && data.length > 0 && !selectedEventId) {
           const scannableEvents = data.filter((e: Event) => !(e.type === "INTRAMURAL" && !e.parentEventId))
           if (scannableEvents.length > 0) {
