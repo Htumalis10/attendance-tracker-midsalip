@@ -1,5 +1,40 @@
 // Time utility functions for handling 12-hour (AM/PM) and 24-hour formats
 
+const PH_TIMEZONE = "Asia/Manila"
+
+/**
+ * Get the current date/time in Philippine timezone (Asia/Manila, UTC+8).
+ * Use this instead of `new Date()` for all server-side time comparisons.
+ * Returns a Date object whose local methods (getHours, getDate, etc.) reflect PHT.
+ */
+export function getPHTime(): Date {
+  const now = new Date()
+  // Format in PH timezone and parse back to get a Date with PHT values in local fields
+  const phStr = now.toLocaleString("en-US", { timeZone: PH_TIMEZONE })
+  return new Date(phStr)
+}
+
+/**
+ * Get a Date object representing a Philippine-local datetime from components.
+ * Useful for building event start/end times in PHT.
+ */
+export function phDate(year: number, month: number, day: number, hours = 0, minutes = 0, seconds = 0): Date {
+  // Build ISO-like string in PHT and parse
+  const pad = (n: number) => n.toString().padStart(2, "0")
+  const str = `${year}-${pad(month + 1)}-${pad(day)}T${pad(hours)}:${pad(minutes)}:${pad(seconds)}+08:00`
+  return new Date(str)
+}
+
+/**
+ * Get a Philippine-time Date for storing timestamps (e.g., attendance timeIn/timeOut).
+ * Returns a proper UTC Date that, when displayed in PHT, shows the current PH time.
+ * Use this for Prisma DateTime fields that need correct PH timestamps.
+ */
+export function nowPH(): Date {
+  // Just return current UTC time - Prisma stores as UTC and we display in PH
+  return new Date()
+}
+
 /**
  * Convert 24-hour time string to 12-hour format with AM/PM
  * @param time24 - Time in "HH:mm" format (e.g., "14:30")
@@ -128,7 +163,7 @@ export function isWithinAttendanceWindow(
   timeOut: string, 
   gracePeriodMinutes: number = 60
 ): { isWithinTimeIn: boolean; isWithinTimeOut: boolean; isActive: boolean } {
-  const now = new Date()
+  const now = getPHTime()
   const currentHours = now.getHours()
   const currentMinutes = now.getMinutes()
   const currentTotalMinutes = currentHours * 60 + currentMinutes

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
+import { getPHTime } from "@/lib/time-utils"
 
 // GET /api/dashboard/stats - Get dashboard statistics
 export async function GET() {
@@ -18,8 +19,8 @@ export async function GET() {
       where: { status: "UPCOMING" },
     })
 
-    // Get today's attendance
-    const today = new Date()
+    // Get today's attendance (in Philippine time)
+    const today = getPHTime()
     today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -41,7 +42,7 @@ export async function GET() {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     
     for (let i = 6; i >= 0; i--) {
-      const date = new Date()
+      const date = getPHTime()
       date.setDate(date.getDate() - i)
       date.setHours(0, 0, 0, 0)
       
@@ -81,7 +82,7 @@ export async function GET() {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     
     for (let i = 5; i >= 0; i--) {
-      const date = new Date()
+      const date = getPHTime()
       date.setMonth(date.getMonth() - i)
       date.setDate(1)
       date.setHours(0, 0, 0, 0)
@@ -133,14 +134,14 @@ export async function GET() {
     })
 
     // Calculate week-over-week change
-    const lastWeekStart = new Date()
+    const lastWeekStart = getPHTime()
     lastWeekStart.setDate(lastWeekStart.getDate() - 14)
     lastWeekStart.setHours(0, 0, 0, 0)
-    const lastWeekEnd = new Date()
+    const lastWeekEnd = getPHTime()
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 7)
     lastWeekEnd.setHours(0, 0, 0, 0)
     
-    const thisWeekStart = new Date()
+    const thisWeekStart = getPHTime()
     thisWeekStart.setDate(thisWeekStart.getDate() - 7)
     thisWeekStart.setHours(0, 0, 0, 0)
     

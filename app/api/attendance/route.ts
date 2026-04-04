@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
+import { getPHTime } from "@/lib/time-utils"
 
 // GET /api/attendance - Get all attendance records
 export async function GET(request: NextRequest) {
@@ -120,8 +121,8 @@ export async function POST(request: NextRequest) {
       let lateMinutes = 0
       if (event && event.timeIn) {
         const [eventHour, eventMinute] = event.timeIn.split(":").map(Number)
-        const now = new Date()
-        const eventTime = new Date()
+        const now = getPHTime()
+        const eventTime = new Date(now)
         eventTime.setHours(eventHour, eventMinute, 0, 0)
         
         if (now > eventTime) {
@@ -187,8 +188,8 @@ export async function POST(request: NextRequest) {
       
       if (periodTimeIn) {
         const [eventHour, eventMinute] = periodTimeIn.split(":").map(Number)
-        const now = new Date()
-        const eventTime = new Date()
+        const now = getPHTime()
+        const eventTime = new Date(now)
         eventTime.setHours(eventHour, eventMinute, 0, 0)
         
         if (now > eventTime) {

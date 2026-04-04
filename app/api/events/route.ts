@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { NotificationType } from "@prisma/client"
+import { getPHTime, phDate } from "@/lib/time-utils"
 
 // Calculate grace period based on event duration
 // Short events (5-10 mins): 10 minutes grace
@@ -49,7 +50,7 @@ function getTimeSummary(event: { timeIn: string; timeOut: string; afternoonTimeI
 
 // Helper function to determine the correct event status based on date/time
 function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string; afternoonTimeOut?: string | null; eveningTimeOut?: string | null }): string {
-  const now = new Date()
+  const now = getPHTime()
   const eventDate = new Date(event.date)
   
   // Extract year, month, day from event date (in UTC since MySQL stores as UTC)
@@ -57,7 +58,7 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   const eventMonth = eventDate.getUTCMonth()
   const eventDay = eventDate.getUTCDate()
   
-  // Get today's date components in local time
+  // Get today's date components in Philippine time
   const todayYear = now.getFullYear()
   const todayMonth = now.getMonth()
   const todayDay = now.getDate()
@@ -67,9 +68,9 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   const lastTimeOut = getLastTimeOut(event)
   const [timeOutHour, timeOutMin] = lastTimeOut.split(":").map(Number)
   
-  // Create full datetime for event start and end in LOCAL time
-  const eventStart = new Date(eventYear, eventMonth, eventDay, timeInHour, timeInMin, 0, 0)
-  const eventEnd = new Date(eventYear, eventMonth, eventDay, timeOutHour, timeOutMin, 0, 0)
+  // Create full datetime for event start and end in PHT
+  const eventStart = phDate(eventYear, eventMonth, eventDay, timeInHour, timeInMin)
+  const eventEnd = phDate(eventYear, eventMonth, eventDay, timeOutHour, timeOutMin)
   
   // Calculate dynamic grace period based on event duration
   const gracePeriodMinutes = calculateGracePeriod(event.timeIn, lastTimeOut)
@@ -100,14 +101,17 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   
   // If event is today
   if (isEventToday) {
-    // If current time is after event end time + grace period, mark as CLOSED
-    if (now >= eventEndWithGrace) {
-      return "CLOSED"
-    }
-    // If current time is within event time window (including grace period), mark as ACTIVE
-    if (now >= eventStart && now < eventEndWithGrace) {
-      return "ACTIVE"
-    }
+      // Compare using absolute timestamps for correct cross-timezone behavior
+      const nowMs = now.getTime()
+      const eventEndWithGraceMs = eventEndWithGrace.getTime()
+      const eventStartMs = eventStart.getTime()
+      
+      // If current time is after event end time + grace period, mark as CLOSED
+      if (nowMs >= eventEndWithGraceMs) {
+        return "CLOSED"
+      }
+      // If current time is within event time window (including grace period), mark as ACTIVE
+      if (nowMs >= eventStartMs && nowMs < eventEndWithGraceMs) {
     // If event hasn't started yet today, keep as UPCOMING
     return "UPCOMING"
   }
@@ -328,8 +332,8 @@ export async function POST(request: NextRequest) {
     
     // Block creating events with past dates (prevent recreating finished events)
     // Use UTC components from the event date (since "YYYY-MM-DD" parses as UTC midnight)
-    // and compare with local date components for the server's "today"
-    const now = new Date()
+    // and compare with Philippine time date components for "today"
+    const now = getPHTime()
     const todayYear = now.getFullYear()
     const todayMonth = now.getMonth()
     const todayDay = now.getDate()
