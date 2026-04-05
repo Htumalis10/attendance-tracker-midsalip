@@ -419,14 +419,18 @@ export default function QRScanner() {
         const data = await response.json()
         setEvents(data)
         
-        // Auto-select first active event only on initial load or if no event selected
-        // Skip parent multi-activity events (they are just containers)
-        if (isInitial && data.length > 0 && !selectedEventId) {
-          const scannableEvents = data.filter((e: Event) => !(e.type === "INTRAMURAL" && !e.parentEventId))
-          if (scannableEvents.length > 0) {
+        // Auto-select logic: pick first scannable event on initial load,
+        // or if previously selected event is no longer active
+        const scannableEvents = data.filter((e: Event) => !(e.type === "INTRAMURAL" && !e.parentEventId))
+        if (scannableEvents.length > 0) {
+          const currentStillActive = selectedEventId && scannableEvents.some((e: Event) => e.id === selectedEventId)
+          if ((isInitial && !selectedEventId) || !currentStillActive) {
             setSelectedEvent(scannableEvents[0].name)
             setSelectedEventId(scannableEvents[0].id)
           }
+        } else if (data.length === 0) {
+          setSelectedEvent("Select Event")
+          setSelectedEventId(null)
         }
       }
 
@@ -1250,24 +1254,47 @@ export default function QRScanner() {
                 </div>
               ) : events.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-2">No active events found</p>
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="w-full px-4 py-2 rounded-lg bg-background border border-border text-foreground text-left flex items-center justify-between hover:bg-muted transition-colors">
-                    <span>{selectedEvent}</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-full">
-                    {events.filter(e => !(e.type === "INTRAMURAL" && !e.parentEventId)).map((event) => (
-                      <DropdownMenuItem 
-                        key={event.id} 
-                        onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
-                      >
-                        {event.parentEventId ? `🏆 ${event.name}` : event.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              ) : (() => {
+                const scannableEvents = events.filter(e => !(e.type === "INTRAMURAL" && !e.parentEventId))
+                
+                // If only 1 scannable event (or SG Officer), show it directly
+                if (scannableEvents.length === 1) {
+                  return (
+                    <div className="w-full px-4 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-foreground flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="font-medium">{scannableEvents[0].parentEventId ? `🏆 ${scannableEvents[0].name}` : scannableEvents[0].name}</span>
+                      <span className="ml-auto text-xs text-green-600 dark:text-green-400">Active</span>
+                    </div>
+                  )
+                }
+                
+                // Multiple scannable events — show dropdown
+                return (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="w-full px-4 py-2.5 rounded-lg bg-background border border-border text-foreground text-left flex items-center justify-between hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                        <span className="truncate">{selectedEvent}</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                      {scannableEvents.map((event) => (
+                        <DropdownMenuItem 
+                          key={event.id} 
+                          onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
+                          className={selectedEventId === event.id ? "bg-primary/10 text-primary" : ""}
+                        >
+                          <div className="flex items-center gap-2 w-full">
+                            {selectedEventId === event.id && <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
+                            <span className="truncate">{event.parentEventId ? `🏆 ${event.name}` : event.name}</span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )
+              })()}
             </div>
             
             {/* Event Time Info */}
