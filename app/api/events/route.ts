@@ -101,17 +101,19 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   
   // If event is today
   if (isEventToday) {
-      // Compare using absolute timestamps for correct cross-timezone behavior
-      const nowMs = now.getTime()
-      const eventEndWithGraceMs = eventEndWithGrace.getTime()
-      const eventStartMs = eventStart.getTime()
-      
-      // If current time is after event end time + grace period, mark as CLOSED
-      if (nowMs >= eventEndWithGraceMs) {
-        return "CLOSED"
-      }
-      // If current time is within event time window (including grace period), mark as ACTIVE
-      if (nowMs >= eventStartMs && nowMs < eventEndWithGraceMs) {
+    // Compare using absolute timestamps for correct cross-timezone behavior
+    const nowMs = now.getTime()
+    const eventEndWithGraceMs = eventEndWithGrace.getTime()
+    const eventStartMs = eventStart.getTime()
+    
+    // If current time is after event end time + grace period, mark as CLOSED
+    if (nowMs >= eventEndWithGraceMs) {
+      return "CLOSED"
+    }
+    // If current time is within event time window (including grace period), mark as ACTIVE
+    if (nowMs >= eventStartMs && nowMs < eventEndWithGraceMs) {
+      return "ACTIVE"
+    }
     // If event hasn't started yet today, keep as UPCOMING
     return "UPCOMING"
   }
