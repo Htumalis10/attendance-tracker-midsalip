@@ -456,14 +456,14 @@ export default function QRScanner() {
         const data = await response.json()
         setEvents(data)
         
-        // Auto-select logic: pick first scannable event on initial load,
+        // Auto-select logic: pick first active event on initial load,
         // or if previously selected event is no longer active
-        const scannableEvents = data.filter((e: Event) => !(e.type === "INTRAMURAL" && !e.parentEventId))
-        if (scannableEvents.length > 0) {
-          const currentStillActive = selectedEventId && scannableEvents.some((e: Event) => e.id === selectedEventId)
+        const activeEvents = data as Event[]
+        if (activeEvents.length > 0) {
+          const currentStillActive = selectedEventId && activeEvents.some((e: Event) => e.id === selectedEventId)
           if ((isInitial && !selectedEventId) || !currentStillActive) {
-            setSelectedEvent(scannableEvents[0].name)
-            setSelectedEventId(scannableEvents[0].id)
+            setSelectedEvent(activeEvents[0].name)
+            setSelectedEventId(activeEvents[0].id)
           }
         } else if (data.length === 0) {
           setSelectedEvent("Select Event")
@@ -1292,20 +1292,20 @@ export default function QRScanner() {
               ) : events.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-2">No active events found</p>
               ) : (() => {
-                const scannableEvents = events.filter(e => !(e.type === "INTRAMURAL" && !e.parentEventId))
+                const activeEvents = events
                 
-                // If only 1 scannable event (or SG Officer), show it directly
-                if (scannableEvents.length === 1) {
+                // If only 1 active event, show it directly
+                if (activeEvents.length === 1) {
                   return (
                     <div className="w-full px-4 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-foreground flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      <span className="font-medium">{scannableEvents[0].parentEventId ? `🏆 ${scannableEvents[0].name}` : scannableEvents[0].name}</span>
+                      <span className="font-medium">{activeEvents[0].parentEventId ? `🏆 ${activeEvents[0].name}` : activeEvents[0].name}</span>
                       <span className="ml-auto text-xs text-green-600 dark:text-green-400">Active</span>
                     </div>
                   )
                 }
                 
-                // Multiple scannable events — show dropdown
+                // Multiple active events — show dropdown
                 return (
                   <DropdownMenu>
                     <DropdownMenuTrigger className="w-full px-4 py-2.5 rounded-lg bg-background border border-border text-foreground text-left flex items-center justify-between hover:bg-muted transition-colors">
@@ -1316,7 +1316,7 @@ export default function QRScanner() {
                       <ChevronDown className="w-4 h-4 flex-shrink-0 ml-2" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
-                      {scannableEvents.map((event) => (
+                      {activeEvents.map((event) => (
                         <DropdownMenuItem 
                           key={event.id} 
                           onClick={() => { setSelectedEvent(event.name); setSelectedEventId(event.id); }}
