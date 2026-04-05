@@ -14,8 +14,12 @@ interface AttendanceRecord {
   id: string
   userId: string
   eventId: string
-  timeIn: string
+  timeIn: string | null
   timeOut: string | null
+  afternoonTimeIn?: string | null
+  afternoonTimeOut?: string | null
+  eveningTimeIn?: string | null
+  eveningTimeOut?: string | null
   status: string
   user: {
     name: string
@@ -99,10 +103,9 @@ export default function AttendanceMonitoring() {
     fetchEvents()
   }, [])
 
-  // Fetch attendance records
+  // Fetch attendance records (with polling for real-time updates)
   useEffect(() => {
     const fetchAttendance = async () => {
-      setIsLoading(true)
       try {
         const params = new URLSearchParams()
         if (selectedEventId) {
@@ -129,7 +132,12 @@ export default function AttendanceMonitoring() {
         setIsLoading(false)
       }
     }
+    setIsLoading(true)
     fetchAttendance()
+
+    // Poll every 10 seconds for real-time updates
+    const interval = setInterval(fetchAttendance, 10000)
+    return () => clearInterval(interval)
   }, [selectedEventId, searchQuery, statusFilter, dateFilter])
 
   // Export to CSV
@@ -139,13 +147,17 @@ export default function AttendanceMonitoring() {
       return
     }
 
-    const headers = ["Name", "School ID", "Event", "Time-In", "Time-Out", "Status"]
+    const headers = ["Name", "School ID", "Event", "Morning In", "Morning Out", "Afternoon In", "Afternoon Out", "Evening In", "Evening Out", "Status"]
     const csvData = attendanceRecords.map(record => [
       record.user.name,
       record.user.schoolId,
       record.event.name,
-      new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+      record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      record.timeOut ? new Date(record.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      record.afternoonTimeIn ? new Date(record.afternoonTimeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      record.afternoonTimeOut ? new Date(record.afternoonTimeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      record.eveningTimeIn ? new Date(record.eveningTimeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      record.eveningTimeOut ? new Date(record.eveningTimeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
       record.status
     ])
 
@@ -189,9 +201,25 @@ export default function AttendanceMonitoring() {
     }
   }
 
-  const formatTime = (dateString: string | null) => {
+  const formatTime = (dateString: string | null | undefined) => {
     if (!dateString) return "—"
     return new Date(dateString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  // Get the first available time-in across all periods
+  const getEffectiveTimeIn = (record: AttendanceRecord) => {
+    return record.timeIn || record.afternoonTimeIn || record.eveningTimeIn || null
+  }
+
+  // Get the last available time-out across all periods
+  const getEffectiveTimeOut = (record: AttendanceRecord) => {
+    return record.eveningTimeOut || record.afternoonTimeOut || record.timeOut || null
+  }
+
+  // Check if record has multi-period data
+  const hasMultiPeriod = (record: AttendanceRecord) => {
+    const periods = [record.timeIn, record.afternoonTimeIn, record.eveningTimeIn].filter(Boolean)
+    return periods.length > 1
   }
 
   return (
@@ -311,10 +339,29 @@ export default function AttendanceMonitoring() {
                   <td className="font-mono text-sm text-primary hidden sm:table-cell">{record.user.schoolId}</td>
                   <td className="text-muted-foreground text-sm hidden md:table-cell">{record.event.name}</td>
                   <td className="text-sm">
-                    <div>{formatTime(record.timeIn)}</div>
-                    <div className="sm:hidden text-xs text-muted-foreground">Out: {formatTime(record.timeOut)}</div>
+                    {hasMultiPeriod(record) ? (
+                      <div className="space-y-0.5">
+                        {record.timeIn && <div><span className="text-blue-400 text-[10px]">AM</span> {formatTime(record.timeIn)}</div>}
+                        {record.afternoonTimeIn && <div><span className="text-orange-400 text-[10px]">PM</span> {formatTime(record.afternoonTimeIn)}</div>}
+                        {record.eveningTimeIn && <div><span className="text-violet-400 text-[10px]">EVE</span> {formatTime(record.eveningTimeIn)}</div>}
+                      </div>
+                    ) : (
+                      <div>{formatTime(getEffectiveTimeIn(record))}</div>
+                    )}
+                    <div className="sm:hidden text-xs text-muted-foreground">Out: {formatTime(getEffectiveTimeOut(record))}</div>
                   </td>
-                  <td className="text-sm hidden sm:table-cell">{formatTime(record.timeOut)}</td>
+                  <td className="text-sm hidden sm:table-cell">
+                    {hasMultiPeriod(record) ? (
+                      <div className="space-y-0.5">
+                        {record.timeOut && <div><span className="text-blue-400 text-[10px]">AM</span> {formatTime(record.timeOut)}</div>}
+                        {record.afternoonTimeOut && <div><span className="text-orange-400 text-[10px]">PM</span> {formatTime(record.afternoonTimeOut)}</div>}
+                        {record.eveningTimeOut && <div><span className="text-violet-400 text-[10px]">EVE</span> {formatTime(record.eveningTimeOut)}</div>}
+                        {!record.timeOut && !record.afternoonTimeOut && !record.eveningTimeOut && <div>—</div>}
+                      </div>
+                    ) : (
+                      <div>{formatTime(getEffectiveTimeOut(record))}</div>
+                    )}
+                  </td>
                   <td>
                     {editingRecordId === record.id ? (
                       <Select value={editingStatus} onValueChange={setEditingStatus}>

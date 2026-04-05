@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("userId")
     const status = searchParams.get("status")
     const date = searchParams.get("date")
+    const search = searchParams.get("search")
 
     const where: any = {}
 
@@ -23,6 +24,13 @@ export async function GET(request: NextRequest) {
 
     if (status && status !== "all") {
       where.status = status.toUpperCase()
+    }
+
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search } } },
+        { user: { schoolId: { contains: search } } },
+      ]
     }
 
     if (date) {
