@@ -177,19 +177,37 @@ export default function QRScanner() {
   }
 
   // Get effective timeIn/timeOut for the current period
+  // Supports "spanning" events where morning timeOut is empty and the event
+  // continues into afternoon/evening (no intermediate timeIn set)
   const getEffectiveTimes = () => {
     if (!selectedEventId) return { timeIn: "", timeOut: "" }
     const event = events.find(e => e.id === selectedEventId)
     if (!event) return { timeIn: "", timeOut: "" }
     
     const period = getCurrentPeriod()
-    if (period === "afternoon" && event.afternoonTimeIn && event.afternoonTimeOut) {
-      return { timeIn: event.afternoonTimeIn, timeOut: event.afternoonTimeOut }
-    }
     if (period === "evening" && event.eveningTimeIn && event.eveningTimeOut) {
       return { timeIn: event.eveningTimeIn, timeOut: event.eveningTimeOut }
     }
-    return { timeIn: event.timeIn, timeOut: event.timeOut }
+    if (period === "afternoon" && event.afternoonTimeIn) {
+      // Afternoon spans to evening if afternoonTimeOut is empty, no eveningTimeIn, but eveningTimeOut exists
+      let timeOut = event.afternoonTimeOut || ""
+      if (!timeOut && !event.eveningTimeIn && event.eveningTimeOut) {
+        timeOut = event.eveningTimeOut
+      }
+      return { timeIn: event.afternoonTimeIn, timeOut }
+    }
+    // Morning period - check for spanning to later periods
+    let timeOut = event.timeOut || ""
+    if (!timeOut) {
+      if (!event.afternoonTimeIn && event.afternoonTimeOut) {
+        // Morning spans directly to afternoon timeOut
+        timeOut = event.afternoonTimeOut
+      } else if (!event.afternoonTimeIn && !event.afternoonTimeOut && !event.eveningTimeIn && event.eveningTimeOut) {
+        // Morning spans all the way to evening timeOut
+        timeOut = event.eveningTimeOut
+      }
+    }
+    return { timeIn: event.timeIn, timeOut }
   }
 
   // Check if there's a next period after the current one

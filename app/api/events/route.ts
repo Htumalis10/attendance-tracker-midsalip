@@ -42,6 +42,11 @@ function getFirstTimeIn(event: { timeIn: string }): string {
 
 // Helper: build time summary string for notifications
 function getTimeSummary(event: { timeIn: string; timeOut: string; afternoonTimeIn?: string | null; afternoonTimeOut?: string | null; eveningTimeIn?: string | null; eveningTimeOut?: string | null }): string {
+  // Spanning: morning timeIn with no morning timeOut, directly to afternoon/evening timeOut
+  if (event.timeIn && !event.timeOut && !event.afternoonTimeIn && (event.afternoonTimeOut || event.eveningTimeOut)) {
+    const endTime = event.eveningTimeOut && !event.eveningTimeIn ? event.eveningTimeOut : event.afternoonTimeOut
+    return `${event.timeIn} - ${endTime}`
+  }
   const parts = [`${event.timeIn} - ${event.timeOut}`]
   if (event.afternoonTimeIn && event.afternoonTimeOut) parts.push(`${event.afternoonTimeIn} - ${event.afternoonTimeOut}`)
   if (event.eveningTimeIn && event.eveningTimeOut) parts.push(`${event.eveningTimeIn} - ${event.eveningTimeOut}`)

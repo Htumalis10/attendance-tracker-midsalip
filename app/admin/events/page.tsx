@@ -541,39 +541,55 @@ export default function EventManagement() {
             </div>
 
             <div className="space-y-1 mb-4 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-muted p-2 rounded">
-                  <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Morning In</p>
-                  <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeIn)}</p>
-                </div>
-                <div className="bg-muted p-2 rounded">
-                  <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Morning Out</p>
-                  <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeOut)}</p>
-                </div>
-              </div>
-              {event.afternoonTimeIn && event.afternoonTimeOut && (
+              {/* Spanning event: morning in → afternoon/evening out */}
+              {event.timeIn && !event.timeOut && (event.afternoonTimeOut || event.eveningTimeOut) && !event.afternoonTimeIn ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-blue-500/5 border border-blue-500/10 p-2 rounded">
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Afternoon In</p>
-                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.afternoonTimeIn)}</p>
+                  <div className="bg-muted p-2 rounded">
+                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Time-In <span className="text-blue-400">(Morning)</span></p>
+                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeIn)}</p>
                   </div>
-                  <div className="bg-blue-500/5 border border-blue-500/10 p-2 rounded">
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Afternoon Out</p>
-                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.afternoonTimeOut)}</p>
-                  </div>
-                </div>
-              )}
-              {event.eveningTimeIn && event.eveningTimeOut && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-violet-500/5 border border-violet-500/10 p-2 rounded">
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Evening In</p>
-                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.eveningTimeIn)}</p>
-                  </div>
-                  <div className="bg-violet-500/5 border border-violet-500/10 p-2 rounded">
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Evening Out</p>
-                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.eveningTimeOut)}</p>
+                  <div className="bg-muted p-2 rounded">
+                    <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Time-Out <span className="text-orange-400">({event.eveningTimeOut && !event.eveningTimeIn ? "Evening" : "Afternoon"})</span></p>
+                    <p className="font-semibold text-foreground">{formatTimeDisplay(event.eveningTimeOut && !event.eveningTimeIn ? event.eveningTimeOut : event.afternoonTimeOut!)}</p>
                   </div>
                 </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-muted p-2 rounded">
+                      <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Morning In</p>
+                      <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeIn)}</p>
+                    </div>
+                    <div className="bg-muted p-2 rounded">
+                      <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Morning Out</p>
+                      <p className="font-semibold text-foreground">{formatTimeDisplay(event.timeOut)}</p>
+                    </div>
+                  </div>
+                  {event.afternoonTimeIn && event.afternoonTimeOut && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-blue-500/5 border border-blue-500/10 p-2 rounded">
+                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Afternoon In</p>
+                        <p className="font-semibold text-foreground">{formatTimeDisplay(event.afternoonTimeIn)}</p>
+                      </div>
+                      <div className="bg-blue-500/5 border border-blue-500/10 p-2 rounded">
+                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Afternoon Out</p>
+                        <p className="font-semibold text-foreground">{formatTimeDisplay(event.afternoonTimeOut)}</p>
+                      </div>
+                    </div>
+                  )}
+                  {event.eveningTimeIn && event.eveningTimeOut && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-violet-500/5 border border-violet-500/10 p-2 rounded">
+                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Evening In</p>
+                        <p className="font-semibold text-foreground">{formatTimeDisplay(event.eveningTimeIn)}</p>
+                      </div>
+                      <div className="bg-violet-500/5 border border-violet-500/10 p-2 rounded">
+                        <p className="text-muted-foreground text-[10px] uppercase tracking-wide">Evening Out</p>
+                        <p className="font-semibold text-foreground">{formatTimeDisplay(event.eveningTimeOut)}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -757,6 +773,7 @@ export default function EventManagement() {
                   />
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">Tip: Leave Morning Time-Out empty and set Afternoon Time-Out to span across periods.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Morning Time-In</label>
@@ -767,7 +784,7 @@ export default function EventManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Morning Time-Out</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Morning Time-Out <span className="text-muted-foreground text-xs">(optional)</span></label>
                   <TimePicker
                     value={newEvent.timeOut}
                     onChange={(value) => setNewEvent({ ...newEvent, timeOut: value })}
@@ -1129,6 +1146,7 @@ function EditEventModal({
           {/* Morning Period */}
           <div>
             <label className="block text-sm font-medium text-blue-400 mb-1">Morning</label>
+            <p className="text-xs text-muted-foreground mb-1">Tip: Leave Time-Out empty and set Afternoon Time-Out to span across periods.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">
@@ -1148,7 +1166,7 @@ function EditEventModal({
                 )}
               </div>
               <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
+                <label className="block text-xs text-muted-foreground mb-1">Time-Out <span className="text-muted-foreground">(optional)</span></label>
                 <TimePicker
                   value={formData.timeOut}
                   onChange={(value) => setFormData({ ...formData, timeOut: value })}
