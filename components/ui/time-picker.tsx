@@ -10,6 +10,7 @@ interface TimePickerProps {
   onChange?: (value: string) => void
   className?: string
   placeholder?: string
+  fixedPeriod?: "AM" | "PM" // Lock AM/PM (e.g., morning=AM, afternoon/evening=PM)
 }
 
 // Helper to convert 24-hour to 12-hour format
@@ -40,10 +41,10 @@ function to24HourString(hours: string, minutes: string, period: "AM" | "PM"): st
   return `${h.toString().padStart(2, "0")}:${minutes}`
 }
 
-export function TimePicker({ value, onChange, className, placeholder = "Select time" }: TimePickerProps) {
+export function TimePicker({ value, onChange, className, placeholder = "Select time", fixedPeriod }: TimePickerProps) {
   const [hours, setHours] = React.useState<string>("")
   const [minutes, setMinutes] = React.useState<string>("")
-  const [period, setPeriod] = React.useState<"AM" | "PM">("AM")
+  const [period, setPeriod] = React.useState<"AM" | "PM">(fixedPeriod || "AM")
 
   // Parse initial value (24-hour format) to 12-hour display
   React.useEffect(() => {
@@ -51,9 +52,17 @@ export function TimePicker({ value, onChange, className, placeholder = "Select t
       const parts = to12HourParts(value)
       setHours(parts.hours)
       setMinutes(parts.minutes)
-      setPeriod(parts.period)
+      setPeriod(fixedPeriod || parts.period)
     }
-  }, [value])
+  }, [value, fixedPeriod])
+
+  // If fixedPeriod changes, re-emit the correct 24h value
+  React.useEffect(() => {
+    if (fixedPeriod && hours && minutes && period !== fixedPeriod) {
+      setPeriod(fixedPeriod)
+      updateTime(hours, minutes, fixedPeriod)
+    }
+  }, [fixedPeriod])
 
   // Update parent when any part changes
   const updateTime = (h: string, m: string, p: "AM" | "PM") => {
@@ -119,15 +128,21 @@ export function TimePicker({ value, onChange, className, placeholder = "Select t
             ))}
           </SelectContent>
         </Select>
-        <Select value={period} onValueChange={(v) => handlePeriodChange(v as "AM" | "PM")}>
-          <SelectTrigger className="w-[70px]">
-            <SelectValue placeholder="AM" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="AM">AM</SelectItem>
-            <SelectItem value="PM">PM</SelectItem>
-          </SelectContent>
-        </Select>
+        {fixedPeriod ? (
+          <div className="w-[70px] h-9 px-3 flex items-center justify-center rounded-md border border-border bg-muted text-sm font-medium text-muted-foreground">
+            {fixedPeriod}
+          </div>
+        ) : (
+          <Select value={period} onValueChange={(v) => handlePeriodChange(v as "AM" | "PM")}>
+            <SelectTrigger className="w-[70px]">
+              <SelectValue placeholder="AM" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="AM">AM</SelectItem>
+              <SelectItem value="PM">PM</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </div>
   )

@@ -763,6 +763,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.timeIn}
                     onChange={(value) => setNewEvent({ ...newEvent, timeIn: value })}
+                    fixedPeriod="AM"
                   />
                 </div>
                 <div>
@@ -770,6 +771,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.timeOut}
                     onChange={(value) => setNewEvent({ ...newEvent, timeOut: value })}
+                    fixedPeriod="AM"
                   />
                 </div>
               </div>
@@ -779,6 +781,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.afternoonTimeIn || ""}
                     onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeIn: value })}
+                    fixedPeriod="PM"
                   />
                 </div>
                 <div>
@@ -786,6 +789,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.afternoonTimeOut || ""}
                     onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeOut: value })}
+                    fixedPeriod="PM"
                   />
                 </div>
               </div>
@@ -795,6 +799,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.eveningTimeIn || ""}
                     onChange={(value) => setNewEvent({ ...newEvent, eveningTimeIn: value })}
+                    fixedPeriod="PM"
                   />
                 </div>
                 <div>
@@ -802,6 +807,7 @@ export default function EventManagement() {
                   <TimePicker
                     value={newEvent.eveningTimeOut || ""}
                     onChange={(value) => setNewEvent({ ...newEvent, eveningTimeOut: value })}
+                    fixedPeriod="PM"
                   />
                 </div>
               </div>
@@ -856,6 +862,7 @@ export default function EventManagement() {
                                 updated[index].timeIn = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="AM"
                             />
                           </div>
                           <div>
@@ -867,6 +874,7 @@ export default function EventManagement() {
                                 updated[index].timeOut = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="AM"
                             />
                           </div>
                         </div>
@@ -883,6 +891,7 @@ export default function EventManagement() {
                                 updated[index].afternoonTimeIn = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="PM"
                             />
                           </div>
                           <div>
@@ -894,6 +903,7 @@ export default function EventManagement() {
                                 updated[index].afternoonTimeOut = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="PM"
                             />
                           </div>
                         </div>
@@ -910,6 +920,7 @@ export default function EventManagement() {
                                 updated[index].eveningTimeIn = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="PM"
                             />
                           </div>
                           <div>
@@ -921,6 +932,7 @@ export default function EventManagement() {
                                 updated[index].eveningTimeOut = value
                                 setIntramuralGames(updated)
                               }}
+                              fixedPeriod="PM"
                             />
                           </div>
                         </div>
@@ -1131,6 +1143,7 @@ function EditEventModal({
                   <TimePicker
                     value={formData.timeIn}
                     onChange={(value) => setFormData({ ...formData, timeIn: value })}
+                    fixedPeriod="AM"
                   />
                 )}
               </div>
@@ -1139,6 +1152,7 @@ function EditEventModal({
                 <TimePicker
                   value={formData.timeOut}
                   onChange={(value) => setFormData({ ...formData, timeOut: value })}
+                  fixedPeriod="AM"
                 />
               </div>
             </div>
@@ -1152,6 +1166,7 @@ function EditEventModal({
                 <TimePicker
                   value={formData.afternoonTimeIn}
                   onChange={(value) => setFormData({ ...formData, afternoonTimeIn: value })}
+                  fixedPeriod="PM"
                 />
               </div>
               <div>
@@ -1159,6 +1174,7 @@ function EditEventModal({
                 <TimePicker
                   value={formData.afternoonTimeOut}
                   onChange={(value) => setFormData({ ...formData, afternoonTimeOut: value })}
+                  fixedPeriod="PM"
                 />
               </div>
             </div>
@@ -1172,6 +1188,7 @@ function EditEventModal({
                 <TimePicker
                   value={formData.eveningTimeIn}
                   onChange={(value) => setFormData({ ...formData, eveningTimeIn: value })}
+                  fixedPeriod="PM"
                 />
               </div>
               <div>
@@ -1179,6 +1196,7 @@ function EditEventModal({
                 <TimePicker
                   value={formData.eveningTimeOut}
                   onChange={(value) => setFormData({ ...formData, eveningTimeOut: value })}
+                  fixedPeriod="PM"
                 />
               </div>
             </div>
@@ -1243,6 +1261,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], timeIn: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="AM"
                         />
                       </div>
                       <div>
@@ -1254,6 +1273,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], timeOut: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="AM"
                         />
                       </div>
                     </div>
@@ -1270,6 +1290,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], afternoonTimeIn: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="PM"
                         />
                       </div>
                       <div>
@@ -1281,6 +1302,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], afternoonTimeOut: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="PM"
                         />
                       </div>
                     </div>
@@ -1297,6 +1319,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], eveningTimeIn: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="PM"
                         />
                       </div>
                       <div>
@@ -1308,6 +1331,7 @@ function EditEventModal({
                             updated[index] = { ...updated[index], eveningTimeOut: value }
                             setEditGames(updated)
                           }}
+                          fixedPeriod="PM"
                         />
                       </div>
                     </div>
