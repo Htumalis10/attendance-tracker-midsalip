@@ -36,7 +36,10 @@ function getLastTimeOut(event: { timeOut: string; afternoonTimeOut?: string | nu
 }
 
 // Helper: get the earliest timeIn of an event
-function getFirstTimeIn(event: { timeIn: string }): string {
+function getFirstTimeIn(event: { timeIn: string; afternoonTimeIn?: string | null; eveningTimeIn?: string | null }): string {
+  if (event.timeIn) return event.timeIn
+  if (event.afternoonTimeIn) return event.afternoonTimeIn
+  if (event.eveningTimeIn) return event.eveningTimeIn
   return event.timeIn
 }
 
@@ -54,7 +57,7 @@ function getTimeSummary(event: { timeIn: string; timeOut: string; afternoonTimeI
 }
 
 // Helper function to determine the correct event status based on date/time
-function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string; afternoonTimeOut?: string | null; eveningTimeOut?: string | null }): string {
+function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: string; status: string; afternoonTimeIn?: string | null; afternoonTimeOut?: string | null; eveningTimeIn?: string | null; eveningTimeOut?: string | null }): string {
   const now = getPHTime()
   const eventDate = new Date(event.date)
   
@@ -68,9 +71,13 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   const todayMonth = now.getMonth()
   const todayDay = now.getDate()
   
-  // Parse timeIn and the LAST timeOut (supports both 24-hour "HH:mm" format)
-  const [timeInHour, timeInMin] = event.timeIn.split(":").map(Number)
+  // Parse the FIRST timeIn and the LAST timeOut
+  const firstTimeIn = getFirstTimeIn(event)
   const lastTimeOut = getLastTimeOut(event)
+  
+  if (!firstTimeIn || !lastTimeOut) return "UPCOMING"
+  
+  const [timeInHour, timeInMin] = firstTimeIn.split(":").map(Number)
   const [timeOutHour, timeOutMin] = lastTimeOut.split(":").map(Number)
   
   // Create full datetime for event start and end in PHT
@@ -78,7 +85,7 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   const eventEnd = phDate(eventYear, eventMonth, eventDay, timeOutHour, timeOutMin)
   
   // Calculate dynamic grace period based on event duration
-  const gracePeriodMinutes = calculateGracePeriod(event.timeIn, lastTimeOut)
+  const gracePeriodMinutes = calculateGracePeriod(firstTimeIn, lastTimeOut)
   
   // Add grace period for time-out
   const eventEndWithGrace = new Date(eventEnd.getTime() + gracePeriodMinutes * 60 * 1000)
@@ -364,9 +371,11 @@ export async function POST(request: NextRequest) {
     if (isEventToday) {
       const correctStatus = getCorrectEventStatus({
         date: eventDate,
-        timeIn: timeIn || "08:00",
-        timeOut: timeOut || "17:00",
+        timeIn: timeIn || "",
+        timeOut: timeOut || "",
+        afternoonTimeIn: afternoonTimeIn || null,
         afternoonTimeOut: afternoonTimeOut || null,
+        eveningTimeIn: eveningTimeIn || null,
         eveningTimeOut: eveningTimeOut || null,
         status: "UPCOMING"
       })
@@ -380,9 +389,11 @@ export async function POST(request: NextRequest) {
     if (!status || status === "UPCOMING") {
       correctStatus = getCorrectEventStatus({
         date: eventDate,
-        timeIn: timeIn || "08:00",
-        timeOut: timeOut || "17:00",
+        timeIn: timeIn || "",
+        timeOut: timeOut || "",
+        afternoonTimeIn: afternoonTimeIn || null,
         afternoonTimeOut: afternoonTimeOut || null,
+        eveningTimeIn: eveningTimeIn || null,
         eveningTimeOut: eveningTimeOut || null,
         status: "UPCOMING"
       })

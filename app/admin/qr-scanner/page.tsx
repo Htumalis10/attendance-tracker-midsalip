@@ -154,6 +154,7 @@ export default function QRScanner() {
   }, [currentTime, selectedEventId, scanMode])
 
   // Determine which period is currently active based on current time
+  // Only returns periods that actually have times configured
   const getCurrentPeriod = (): "morning" | "afternoon" | "evening" => {
     if (!selectedEventId) return "morning"
     const event = events.find(e => e.id === selectedEventId)
@@ -161,17 +162,26 @@ export default function QRScanner() {
     
     const now = new Date()
     
+    // Check evening first (highest priority if time has passed)
     if (event.eveningTimeIn) {
       const [h, m] = event.eveningTimeIn.split(":").map(Number)
       const t = new Date(); t.setHours(h, m, 0, 0)
       if (now >= t) return "evening"
     }
     
+    // Check afternoon
     if (event.afternoonTimeIn) {
       const [h, m] = event.afternoonTimeIn.split(":").map(Number)
       const t = new Date(); t.setHours(h, m, 0, 0)
       if (now >= t) return "afternoon"
     }
+    
+    // Only return "morning" if morning times are actually configured
+    if (event.timeIn) return "morning"
+    
+    // No morning configured — return the earliest configured period
+    if (event.afternoonTimeIn) return "afternoon"
+    if (event.eveningTimeIn) return "evening"
     
     return "morning"
   }
@@ -229,29 +239,38 @@ export default function QRScanner() {
   // Check if time-in is available for current period
   const isTimeInAvailable = () => {
     if (!selectedEventId) return false
-    const { timeOut } = getEffectiveTimes()
-    if (!timeOut) return false
+    const { timeIn, timeOut } = getEffectiveTimes()
+    if (!timeIn || !timeOut) return false
     
-    const [hours, minutes] = timeOut.split(":").map(Number)
+    const [inHours, inMinutes] = timeIn.split(":").map(Number)
+    const timeInDate = new Date()
+    timeInDate.setHours(inHours, inMinutes, 0, 0)
+    
+    const [outHours, outMinutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
-    timeOutDate.setHours(hours, minutes, 0, 0)
+    timeOutDate.setHours(outHours, outMinutes, 0, 0)
     
     const now = new Date()
-    return now < timeOutDate
+    return now >= timeInDate && now < timeOutDate
   }
 
   // Check if time-out is available for current period
   const isTimeOutAvailable = () => {
     if (!selectedEventId) return false
-    const { timeOut } = getEffectiveTimes()
-    if (!timeOut) return false
+    const { timeIn, timeOut } = getEffectiveTimes()
+    if (!timeIn || !timeOut) return false
     
-    const [hours, minutes] = timeOut.split(":").map(Number)
+    const [inHours, inMinutes] = timeIn.split(":").map(Number)
+    const timeInDate = new Date()
+    timeInDate.setHours(inHours, inMinutes, 0, 0)
+    
+    const [outHours, outMinutes] = timeOut.split(":").map(Number)
     const timeOutDate = new Date()
-    timeOutDate.setHours(hours, minutes, 0, 0)
+    timeOutDate.setHours(outHours, outMinutes, 0, 0)
     
     const now = new Date()
-    return now >= timeOutDate
+    // Time-out available: current time is past the period's start AND past the timeOut
+    return now >= timeInDate && now >= timeOutDate
   }
 
   // Calculate grace period based on event duration
@@ -1326,23 +1345,25 @@ export default function QRScanner() {
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                       {period.charAt(0).toUpperCase() + period.slice(1)} Period
                     </span>
-                    {evt.afternoonTimeIn && <span className="text-muted-foreground">Multi-period event</span>}
+                    {(evt.afternoonTimeIn || evt.eveningTimeIn) && <span className="text-muted-foreground">Multi-period event</span>}
                   </div>
-                  {/* Morning */}
-                  <div className={`flex items-center gap-4 text-sm ${period === "morning" ? "text-foreground" : "text-muted-foreground/60"}`}>
-                    <span className="text-xs font-medium w-16">Morning</span>
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                      <span className="font-medium">{formatTimeDisplay(evt.timeIn)}</span>
+                  {/* Morning - only show if morning times are configured */}
+                  {evt.timeIn && (
+                    <div className={`flex items-center gap-4 text-sm ${period === "morning" ? "text-foreground" : "text-muted-foreground/60"}`}>
+                      <span className="text-xs font-medium w-16">Morning</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                        <span className="font-medium">{formatTimeDisplay(evt.timeIn)}</span>
+                      </div>
+                      <span className="text-muted-foreground">→</span>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                        <span className="font-medium">{evt.timeOut ? formatTimeDisplay(evt.timeOut) : "—"}</span>
+                      </div>
                     </div>
-                    <span className="text-muted-foreground">→</span>
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-                      <span className="font-medium">{formatTimeDisplay(evt.timeOut)}</span>
-                    </div>
-                  </div>
+                  )}
                   {/* Afternoon */}
-                  {evt.afternoonTimeIn && evt.afternoonTimeOut && (
+                  {evt.afternoonTimeIn && (
                     <div className={`flex items-center gap-4 text-sm ${period === "afternoon" ? "text-foreground" : "text-muted-foreground/60"}`}>
                       <span className="text-xs font-medium w-16">Afternoon</span>
                       <div className="flex items-center gap-1.5">
@@ -1352,12 +1373,12 @@ export default function QRScanner() {
                       <span className="text-muted-foreground">→</span>
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-                        <span className="font-medium">{formatTimeDisplay(evt.afternoonTimeOut)}</span>
+                        <span className="font-medium">{evt.afternoonTimeOut ? formatTimeDisplay(evt.afternoonTimeOut) : "—"}</span>
                       </div>
                     </div>
                   )}
                   {/* Evening */}
-                  {evt.eveningTimeIn && evt.eveningTimeOut && (
+                  {evt.eveningTimeIn && (
                     <div className={`flex items-center gap-4 text-sm ${period === "evening" ? "text-foreground" : "text-muted-foreground/60"}`}>
                       <span className="text-xs font-medium w-16">Evening</span>
                       <div className="flex items-center gap-1.5">
@@ -1367,7 +1388,7 @@ export default function QRScanner() {
                       <span className="text-muted-foreground">→</span>
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-                        <span className="font-medium">{formatTimeDisplay(evt.eveningTimeOut)}</span>
+                        <span className="font-medium">{evt.eveningTimeOut ? formatTimeDisplay(evt.eveningTimeOut) : "—"}</span>
                       </div>
                     </div>
                   )}
