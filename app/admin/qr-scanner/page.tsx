@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Camera, X, CheckCircle, AlertCircle, Clock, User, ChevronDown, Loader2, QrCode, Volume2, VolumeX, Wifi, WifiOff, CloudOff, RotateCcw, Trash2, Lock, Calendar, MapPin } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Scanner } from "@yudiel/react-qr-scanner"
@@ -447,38 +448,56 @@ export default function QRScanner() {
     }
   }
 
+  // Read eventId from URL params (passed from dashboard)
+  const searchParams = useSearchParams()
+  const preselectedEventId = searchParams.get("eventId")
+
   // Fetch events function (extracted for reuse)
   const fetchEvents = async (isInitial = false) => {
     if (isInitial) setIsLoadingEvents(true)
     try {
+      // Fetch both active and upcoming events to find preselected event
       const response = await fetch("/api/events?status=ACTIVE")
+      let allEvents: Event[] = []
       if (response.ok) {
         const data = await response.json()
+        allEvents = data as Event[]
         setEvents(data)
-        
-        // Auto-select logic: pick first active event on initial load,
-        // or if previously selected event is no longer active
-        const activeEvents = data as Event[]
-        if (activeEvents.length > 0) {
-          const currentStillActive = selectedEventId && activeEvents.some((e: Event) => e.id === selectedEventId)
-          if ((isInitial && !selectedEventId) || !currentStillActive) {
-            setSelectedEvent(activeEvents[0].name)
-            setSelectedEventId(activeEvents[0].id)
-          }
-        } else if (data.length === 0) {
-          setSelectedEvent("Select Event")
-          setSelectedEventId(null)
-        }
       }
 
       // Always fetch upcoming events for SG Officers (check role directly from localStorage)
       const currentUser = getCurrentUser()
+      let upcomingList: Event[] = []
       if (currentUser?.role === "sg_officer") {
         const upRes = await fetch("/api/events?status=UPCOMING")
         if (upRes.ok) {
           const upData = await upRes.json()
+          upcomingList = upData as Event[]
           setUpcomingEvents(upData)
         }
+      }
+
+      // Auto-select logic
+      const combinedEvents = [...allEvents, ...upcomingList]
+      if (isInitial && preselectedEventId) {
+        // If an eventId was passed via URL, find and select it
+        const targetEvent = combinedEvents.find((e: Event) => e.id === preselectedEventId)
+        if (targetEvent) {
+          setSelectedEvent(targetEvent.name)
+          setSelectedEventId(targetEvent.id)
+        } else if (allEvents.length > 0) {
+          setSelectedEvent(allEvents[0].name)
+          setSelectedEventId(allEvents[0].id)
+        }
+      } else if (allEvents.length > 0) {
+        const currentStillActive = selectedEventId && allEvents.some((e: Event) => e.id === selectedEventId)
+        if ((isInitial && !selectedEventId) || !currentStillActive) {
+          setSelectedEvent(allEvents[0].name)
+          setSelectedEventId(allEvents[0].id)
+        }
+      } else if (allEvents.length === 0 && !preselectedEventId) {
+        setSelectedEvent("Select Event")
+        setSelectedEventId(null)
       }
     } catch (err) {
       console.error("Failed to fetch events:", err)
@@ -497,7 +516,8 @@ export default function QRScanner() {
     }, 10000)
     
     return () => clearInterval(pollInterval)
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedEventId])
 
   // Setup online/offline listeners and sync
   useEffect(() => {
@@ -958,15 +978,16 @@ export default function QRScanner() {
   // SG Officer lock screen — scanner is locked until an event is ACTIVE
   if (isSGOfficer && events.length === 0) {
     // Find the next upcoming event to show countdown
+    const getFirstTimeIn = (e: UpcomingEvent) => e.timeIn || e.afternoonTimeIn || e.eveningTimeIn || ""
     const sortedUpcoming = [...upcomingEvents]
       .filter(e => e.status === "UPCOMING")
       .sort((a, b) => {
         const dateA = new Date(a.date)
         const dateB = new Date(b.date)
-        const [hA, mA] = a.timeIn.split(":").map(Number)
-        const [hB, mB] = b.timeIn.split(":").map(Number)
-        dateA.setHours(hA, mA, 0, 0)
-        dateB.setHours(hB, mB, 0, 0)
+        const tiA = getFirstTimeIn(a)
+        const tiB = getFirstTimeIn(b)
+        if (tiA) { const [hA, mA] = tiA.split(":").map(Number); dateA.setHours(hA, mA, 0, 0) }
+        if (tiB) { const [hB, mB] = tiB.split(":").map(Number); dateB.setHours(hB, mB, 0, 0) }
         return dateA.getTime() - dateB.getTime()
       })
 
@@ -977,7 +998,10 @@ export default function QRScanner() {
       const eventMonth = eventDate.getUTCMonth()
       const eventDay = eventDate.getUTCDate()
 
-      const [h, m] = event.timeIn.split(":").map(Number)
+      const firstTimeIn = getFirstTimeIn(event)
+      if (!firstTimeIn) return null
+      const [h, m] = firstTimeIn.split(":").map(Number)
+      if (isNaN(h) || isNaN(m)) return null
       const startTime = new Date(eventYear, eventMonth, eventDay, h, m, 0)
       const diff = startTime.getTime() - currentTime.getTime()
       if (diff <= 0) return null
@@ -1084,20 +1108,22 @@ export default function QRScanner() {
                           <Calendar className="w-3 h-3" />
                           {eventDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {event.timeIn} - {event.timeOut}
-                        </span>
-                        {event.afternoonTimeIn && event.afternoonTimeOut && (
-                          <span className="flex items-center gap-1 text-blue-500">
+                        {event.timeIn && (
+                          <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {event.afternoonTimeIn} - {event.afternoonTimeOut}
+                            <span className="text-sky-500 font-medium">AM</span> {event.timeIn}{event.timeOut && ` - ${event.timeOut}`}
                           </span>
                         )}
-                        {event.eveningTimeIn && event.eveningTimeOut && (
+                        {event.afternoonTimeIn && (
+                          <span className="flex items-center gap-1 text-blue-500">
+                            <Clock className="w-3 h-3" />
+                            <span className="font-medium">PM</span> {event.afternoonTimeIn}{event.afternoonTimeOut && ` - ${event.afternoonTimeOut}`}
+                          </span>
+                        )}
+                        {event.eveningTimeIn && (
                           <span className="flex items-center gap-1 text-violet-500">
                             <Clock className="w-3 h-3" />
-                            {event.eveningTimeIn} - {event.eveningTimeOut}
+                            <span className="font-medium">EVE</span> {event.eveningTimeIn}{event.eveningTimeOut && ` - ${event.eveningTimeOut}`}
                           </span>
                         )}
                         <span className="flex items-center gap-1">

@@ -113,8 +113,9 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
   
   // If event is today
   if (isEventToday) {
-    // Compare using absolute timestamps for correct cross-timezone behavior
-    const nowMs = now.getTime()
+    // Compare using real UTC timestamps - phDate() returns correct UTC,
+    // so use Date.now() (real UTC) instead of getPHTime().getTime() which is shifted on non-PH servers
+    const nowMs = Date.now()
     const eventEndWithGraceMs = eventEndWithGrace.getTime()
     const eventStartMs = eventStart.getTime()
     

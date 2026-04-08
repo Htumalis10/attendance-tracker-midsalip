@@ -1180,12 +1180,21 @@ function EditEventModal({
             <label className="block text-sm font-medium text-orange-400 mb-1">Afternoon <span className="text-xs text-muted-foreground">(optional)</span></label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-In</label>
-                <TimePicker
-                  value={formData.afternoonTimeIn}
-                  onChange={(value) => setFormData({ ...formData, afternoonTimeIn: value })}
-                  fixedPeriod="PM"
-                />
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Time-In
+                  {isEventStarted && formData.afternoonTimeIn && <span className="ml-1">(locked)</span>}
+                </label>
+                {isEventStarted && formData.afternoonTimeIn ? (
+                  <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
+                    {formData.afternoonTimeIn}
+                  </div>
+                ) : (
+                  <TimePicker
+                    value={formData.afternoonTimeIn}
+                    onChange={(value) => setFormData({ ...formData, afternoonTimeIn: value })}
+                    fixedPeriod="PM"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
@@ -1202,12 +1211,21 @@ function EditEventModal({
             <label className="block text-sm font-medium text-violet-400 mb-1">Evening <span className="text-xs text-muted-foreground">(optional)</span></label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-In</label>
-                <TimePicker
-                  value={formData.eveningTimeIn}
-                  onChange={(value) => setFormData({ ...formData, eveningTimeIn: value })}
-                  fixedPeriod="PM"
-                />
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Time-In
+                  {isEventStarted && formData.eveningTimeIn && <span className="ml-1">(locked)</span>}
+                </label>
+                {isEventStarted && formData.eveningTimeIn ? (
+                  <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
+                    {formData.eveningTimeIn}
+                  </div>
+                ) : (
+                  <TimePicker
+                    value={formData.eveningTimeIn}
+                    onChange={(value) => setFormData({ ...formData, eveningTimeIn: value })}
+                    fixedPeriod="PM"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
@@ -1271,16 +1289,25 @@ function EditEventModal({
                     <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Time-In</label>
-                        <TimePicker
-                          value={game.timeIn}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], timeIn: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="AM"
-                        />
+                        <label className="text-[10px] text-muted-foreground">
+                          Time-In
+                          {isEventStarted && game.timeIn && <span className="ml-1">(locked)</span>}
+                        </label>
+                        {isEventStarted && game.timeIn ? (
+                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                            {game.timeIn}
+                          </div>
+                        ) : (
+                          <TimePicker
+                            value={game.timeIn}
+                            onChange={(value) => {
+                              const updated = [...editGames]
+                              updated[index] = { ...updated[index], timeIn: value }
+                              setEditGames(updated)
+                            }}
+                            fixedPeriod="AM"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">Time-Out</label>
@@ -1300,16 +1327,25 @@ function EditEventModal({
                     <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Time-In</label>
-                        <TimePicker
-                          value={game.afternoonTimeIn}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], afternoonTimeIn: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="PM"
-                        />
+                        <label className="text-[10px] text-muted-foreground">
+                          Time-In
+                          {isEventStarted && game.afternoonTimeIn && <span className="ml-1">(locked)</span>}
+                        </label>
+                        {isEventStarted && game.afternoonTimeIn ? (
+                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                            {game.afternoonTimeIn}
+                          </div>
+                        ) : (
+                          <TimePicker
+                            value={game.afternoonTimeIn}
+                            onChange={(value) => {
+                              const updated = [...editGames]
+                              updated[index] = { ...updated[index], afternoonTimeIn: value }
+                              setEditGames(updated)
+                            }}
+                            fixedPeriod="PM"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">Time-Out</label>
@@ -1329,16 +1365,25 @@ function EditEventModal({
                     <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Time-In</label>
-                        <TimePicker
-                          value={game.eveningTimeIn}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], eveningTimeIn: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="PM"
-                        />
+                        <label className="text-[10px] text-muted-foreground">
+                          Time-In
+                          {isEventStarted && game.eveningTimeIn && <span className="ml-1">(locked)</span>}
+                        </label>
+                        {isEventStarted && game.eveningTimeIn ? (
+                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                            {game.eveningTimeIn}
+                          </div>
+                        ) : (
+                          <TimePicker
+                            value={game.eveningTimeIn}
+                            onChange={(value) => {
+                              const updated = [...editGames]
+                              updated[index] = { ...updated[index], eveningTimeIn: value }
+                              setEditGames(updated)
+                            }}
+                            fixedPeriod="PM"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">Time-Out</label>

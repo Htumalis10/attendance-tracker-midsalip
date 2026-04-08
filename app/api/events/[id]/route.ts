@@ -56,21 +56,26 @@ export async function PUT(
 
     // Get the current event to check if status is changing
     const currentEvent = await prisma.event.findUnique({ where: { id } })
-    const isClosingEvent = status?.toUpperCase() === "CLOSED" && currentEvent?.status !== "CLOSED"
+    if (!currentEvent) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 })
+    }
+    const isClosingEvent = status?.toUpperCase() === "CLOSED" && currentEvent.status !== "CLOSED"
+    const isEventStarted = currentEvent.status === "ACTIVE" || currentEvent.status === "CLOSED"
 
     const event = await prisma.event.update({
       where: { id },
       data: {
         name,
         description,
-        date: date ? new Date(date) : undefined,
+        // Protect date and time-in fields when event is active/closed
+        date: isEventStarted ? undefined : (date ? new Date(date) : undefined),
         venue,
         organizer,
-        timeIn,
+        timeIn: isEventStarted ? undefined : timeIn,
         timeOut,
-        afternoonTimeIn: afternoonTimeIn !== undefined ? (afternoonTimeIn || null) : undefined,
+        afternoonTimeIn: isEventStarted ? undefined : (afternoonTimeIn !== undefined ? (afternoonTimeIn || null) : undefined),
         afternoonTimeOut: afternoonTimeOut !== undefined ? (afternoonTimeOut || null) : undefined,
-        eveningTimeIn: eveningTimeIn !== undefined ? (eveningTimeIn || null) : undefined,
+        eveningTimeIn: isEventStarted ? undefined : (eveningTimeIn !== undefined ? (eveningTimeIn || null) : undefined),
         eveningTimeOut: eveningTimeOut !== undefined ? (eveningTimeOut || null) : undefined,
         status: status?.toUpperCase(),
       },
