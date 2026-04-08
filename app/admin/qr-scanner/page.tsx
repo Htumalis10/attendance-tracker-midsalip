@@ -1841,7 +1841,12 @@ export default function QRScanner() {
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           scan.period === "afternoon" ? "bg-blue-500/10 text-blue-500" : "bg-violet-500/10 text-violet-500"
                         }`}>
-                          {scan.period.toUpperCase()}
+                          {scan.period === "afternoon" ? "PM" : "EVENING"}
+                        </span>
+                      )}
+                      {scan.period === "morning" && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/10 text-sky-500">
+                          AM
                         </span>
                       )}
                     </div>

@@ -342,9 +342,9 @@ export default function AdminDashboard() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5" />
-                  {notif.event.timeIn} - {notif.event.timeOut}
-                  {notif.event.afternoonTimeIn && ` | ${notif.event.afternoonTimeIn} - ${notif.event.afternoonTimeOut}`}
-                  {notif.event.eveningTimeIn && ` | ${notif.event.eveningTimeIn} - ${notif.event.eveningTimeOut}`}
+                  {notif.event.timeIn && <><span className="text-sky-500 font-medium">AM</span> {notif.event.timeIn}{notif.event.timeOut && ` - ${notif.event.timeOut}`}</>}
+                  {notif.event.afternoonTimeIn && <>{notif.event.timeIn && " | "}<span className="text-blue-500 font-medium">PM</span> {notif.event.afternoonTimeIn}{notif.event.afternoonTimeOut && ` - ${notif.event.afternoonTimeOut}`}</>}
+                  {notif.event.eveningTimeIn && <>{(notif.event.timeIn || notif.event.afternoonTimeIn) && " | "}<span className="text-violet-500 font-medium">EVENING</span> {notif.event.eveningTimeIn}{notif.event.eveningTimeOut && ` - ${notif.event.eveningTimeOut}`}</>}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5" />
