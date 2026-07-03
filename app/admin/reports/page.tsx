@@ -1,6 +1,6 @@
 "use client"
-import { Download, FileText, ChevronDown, Loader2 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Download, FileText, ChevronDown, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 
@@ -23,6 +23,17 @@ const COURSES = [
   "BA Communication",
   "Other",
 ]
+
+const YEAR_ORDER: Record<string, number> = {
+  "1st Year": 1,
+  "2nd Year": 2,
+  "3rd Year": 3,
+  "4th Year": 4,
+  "5th Year": 5,
+}
+
+type SortColumn = "name" | "course" | "year" | "schoolId" | "status" | "event" | null
+type SortDirection = "asc" | "desc"
 
 interface Event {
   id: string
@@ -60,6 +71,10 @@ export default function Reports() {
   const [events, setEvents] = useState<Event[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name")
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
 
   // Fetch events
   useEffect(() => {
@@ -115,15 +130,75 @@ export default function Reports() {
     }
   }
 
+  // Handle column sort toggle
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc")
+    } else {
+      setSortColumn(column)
+      setSortDirection("asc")
+    }
+  }
+
+  // Sorted records (client-side)
+  const sortedRecords = useMemo(() => {
+    if (!sortColumn) return attendanceRecords
+
+    return [...attendanceRecords].sort((a, b) => {
+      let valA: string | number = ""
+      let valB: string | number = ""
+
+      switch (sortColumn) {
+        case "name":
+          valA = a.user.name?.toLowerCase() ?? ""
+          valB = b.user.name?.toLowerCase() ?? ""
+          break
+        case "schoolId":
+          valA = a.user.schoolId?.toLowerCase() ?? ""
+          valB = b.user.schoolId?.toLowerCase() ?? ""
+          break
+        case "course":
+          valA = a.user.course?.toLowerCase() ?? "zzz"
+          valB = b.user.course?.toLowerCase() ?? "zzz"
+          break
+        case "year":
+          valA = YEAR_ORDER[a.user.year ?? ""] ?? 99
+          valB = YEAR_ORDER[b.user.year ?? ""] ?? 99
+          break
+        case "event":
+          valA = a.event.name?.toLowerCase() ?? ""
+          valB = b.event.name?.toLowerCase() ?? ""
+          break
+        case "status":
+          valA = a.status?.toLowerCase() ?? ""
+          valB = b.status?.toLowerCase() ?? ""
+          break
+      }
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1
+      return 0
+    })
+  }, [attendanceRecords, sortColumn, sortDirection])
+
+  // Sort icon helper
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="w-3.5 h-3.5 ml-1 opacity-40" />
+    return sortDirection === "asc"
+      ? <ArrowUp className="w-3.5 h-3.5 ml-1 text-primary" />
+      : <ArrowDown className="w-3.5 h-3.5 ml-1 text-primary" />
+  }
+
   const handleExportExcel = () => {
-    if (!generatedReport || attendanceRecords.length === 0) {
+    if (!generatedReport || sortedRecords.length === 0) {
       toast.warning("No records to export")
       return
     }
 
-    // Generate CSV (Excel compatible)
-    const headers = ["Name", "School ID", "Course", "Year", "Event", "Time-In", "Time-Out", "Status"]
-    const csvData = attendanceRecords.map(record => [
+    // Generate CSV (Excel compatible) — sorted order
+    const headers = ["#", "Name", "School ID", "Course", "Year", "Event", "Time-In", "Time-Out", "Status"]
+    const csvData = sortedRecords.map((record, index) => [
+      index + 1,
       record.user.name,
       record.user.schoolId,
       record.user.course || "N/A",
@@ -148,12 +223,12 @@ export default function Reports() {
   }
 
   const handleExportPDF = () => {
-    if (!generatedReport || attendanceRecords.length === 0) {
+    if (!generatedReport || sortedRecords.length === 0) {
       toast.warning("No records to export")
       return
     }
 
-    // Generate HTML report that can be printed as PDF
+    // Generate HTML report that can be printed as PDF — uses sorted order
     const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -180,24 +255,25 @@ export default function Reports() {
     <p><strong>Event:</strong> ${selectedEvent}</p>
     <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
     <p><strong>Filters:</strong> ${selectedCourse} | ${selectedYear}</p>
+    <p><strong>Sorted by:</strong> ${sortColumn ? `${sortColumn.charAt(0).toUpperCase() + sortColumn.slice(1)} (${sortDirection === "asc" ? "Ascending" : "Descending"})` : "Default"}</p>
   </div>
   
   <div class="summary">
     <h3>Summary</h3>
     <div class="stat">
-      <span class="stat-value">${attendanceRecords.length}</span>
+      <span class="stat-value">${sortedRecords.length}</span>
       <span> Total Records</span>
     </div>
     <div class="stat">
-      <span class="stat-value">${attendanceRecords.filter(r => r.status === "PRESENT").length}</span>
+      <span class="stat-value">${sortedRecords.filter(r => r.status === "PRESENT").length}</span>
       <span> Present</span>
     </div>
     <div class="stat">
-      <span class="stat-value">${attendanceRecords.filter(r => r.status === "LATE").length}</span>
+      <span class="stat-value">${sortedRecords.filter(r => r.status === "LATE").length}</span>
       <span> Late</span>
     </div>
     <div class="stat">
-      <span class="stat-value">${attendanceRecords.filter(r => r.status === "ABSENT").length}</span>
+      <span class="stat-value">${sortedRecords.filter(r => r.status === "ABSENT").length}</span>
       <span> Absent</span>
     </div>
   </div>
@@ -205,6 +281,7 @@ export default function Reports() {
   <table>
     <thead>
       <tr>
+        <th>#</th>
         <th>Name</th>
         <th>School ID</th>
         <th>Course</th>
@@ -216,8 +293,9 @@ export default function Reports() {
       </tr>
     </thead>
     <tbody>
-      ${attendanceRecords.map(record => `
+      ${sortedRecords.map((record, index) => `
         <tr>
+          <td>${index + 1}</td>
           <td>${record.user.name}</td>
           <td>${record.user.schoolId}</td>
           <td>${record.user.course || "N/A"}</td>
@@ -349,15 +427,22 @@ export default function Reports() {
 
       {/* Attendance Table */}
       <div className="bg-card rounded-lg border border-border overflow-hidden">
-        <div className="p-4 sm:p-6 border-b border-border">
+        <div className="p-4 sm:p-6 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h2 className="font-semibold text-foreground">Attendance Records</h2>
+          {sortedRecords.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Sorted by <span className="font-medium text-foreground capitalize">{sortColumn ?? "default"}</span>
+              {" "}({sortDirection === "asc" ? "A → Z" : "Z → A"})
+              &nbsp;·&nbsp; Click column headers to sort
+            </p>
+          )}
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
             <span className="ml-2 text-muted-foreground">Loading records...</span>
           </div>
-        ) : attendanceRecords.length === 0 ? (
+        ) : sortedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             No attendance records found
           </div>
@@ -366,19 +451,61 @@ export default function Reports() {
             <table className="data-table">
               <thead>
                 <tr className="bg-muted">
-                  <th>#</th>
-                  <th>Name</th>
-                  <th className="hidden sm:table-cell">School ID</th>
-                  <th className="hidden md:table-cell">Course</th>
-                  <th className="hidden lg:table-cell">Year</th>
-                  <th className="hidden md:table-cell">Event</th>
+                  <th className="w-10">#</th>
+                  <th
+                    className="cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("name")}
+                  >
+                    <span className="inline-flex items-center">
+                      Name <SortIcon column="name" />
+                    </span>
+                  </th>
+                  <th
+                    className="hidden sm:table-cell cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("schoolId")}
+                  >
+                    <span className="inline-flex items-center">
+                      School ID <SortIcon column="schoolId" />
+                    </span>
+                  </th>
+                  <th
+                    className="hidden md:table-cell cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("course")}
+                  >
+                    <span className="inline-flex items-center">
+                      Course <SortIcon column="course" />
+                    </span>
+                  </th>
+                  <th
+                    className="hidden lg:table-cell cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("year")}
+                  >
+                    <span className="inline-flex items-center">
+                      Year <SortIcon column="year" />
+                    </span>
+                  </th>
+                  <th
+                    className="hidden md:table-cell cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("event")}
+                  >
+                    <span className="inline-flex items-center">
+                      Event <SortIcon column="event" />
+                    </span>
+                  </th>
                   <th>Time-In</th>
                   <th className="hidden sm:table-cell">Time-Out</th>
-                  <th>Status</th>
+                  <th
+                    className="cursor-pointer select-none hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort("status")}
+                  >
+                    <span className="inline-flex items-center">
+                      Status <SortIcon column="status" />
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {attendanceRecords.map((record, index) => (
+                {sortedRecords.map((record, index) => (
                   <tr key={record.id}>
                     <td className="text-muted-foreground text-sm">{index + 1}</td>
                     <td className="font-medium text-foreground">

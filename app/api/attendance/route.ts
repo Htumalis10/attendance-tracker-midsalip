@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status")
     const date = searchParams.get("date")
     const search = searchParams.get("search")
+    const course = searchParams.get("course")
+    const year = searchParams.get("year")
 
     const where: any = {}
 
@@ -24,6 +26,14 @@ export async function GET(request: NextRequest) {
 
     if (status && status !== "all") {
       where.status = status.toUpperCase()
+    }
+
+    if (course) {
+      where.user = { ...where.user, course }
+    }
+
+    if (year) {
+      where.user = { ...where.user, year }
     }
 
     if (search) {

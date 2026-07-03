@@ -2,20 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Clock, MapPin, Users, Edit, Trash2, Loader2, CalendarIcon, WifiOff, Wifi, Trophy, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Clock, MapPin, Users, Edit, Archive, Eye, X, Loader2, CalendarIcon, WifiOff, Trophy, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner"
 import { getCurrentUser } from "@/lib/auth"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
@@ -60,12 +50,26 @@ export default function EventManagement() {
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [eventToDelete, setEventToDelete] = useState<Event | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+
+  // Archive state (stored in localStorage to avoid schema change)
+  const ARCHIVED_EVENTS_KEY = "smartcode_archived_event_ids"
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try {
+      const stored = localStorage.getItem(ARCHIVED_EVENTS_KEY)
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch { return new Set() }
+  })
+  const [showArchived, setShowArchived] = useState(false)
+
+  // Attendance view state
+  const [attendanceViewEvent, setAttendanceViewEvent] = useState<Event | null>(null)
+  const [attendanceViewRecords, setAttendanceViewRecords] = useState<any[]>([])
+  const [attendanceViewLoading, setAttendanceViewLoading] = useState(false)
 
   // Form state for new event
   const [newEvent, setNewEvent] = useState({
@@ -202,24 +206,38 @@ export default function EventManagement() {
     setShowEditModal(true)
   }
 
-  const handleDeleteEvent = async () => {
-    if (!eventToDelete) return
-
-    try {
-      const response = await fetch(`/api/events/${eventToDelete.id}`, { method: "DELETE" })
-      if (!response.ok) throw new Error("Failed to delete event")
-      toast.success(`Event "${eventToDelete.name}" deleted successfully`)
-      setShowDeleteDialog(false)
-      setEventToDelete(null)
-      fetchEvents()
-    } catch (err) {
-      toast.error("Failed to delete event")
-    }
+  const handleArchiveEvent = (event: Event) => {
+    setArchivedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(event.id)) {
+        next.delete(event.id)
+        toast.success(`Event "${event.name}" restored`)
+      } else {
+        next.add(event.id)
+        toast.success(`Event "${event.name}" archived (data preserved)`)
+      }
+      localStorage.setItem(ARCHIVED_EVENTS_KEY, JSON.stringify([...next]))
+      return next
+    })
   }
 
-  const confirmDeleteEvent = (event: Event) => {
-    setEventToDelete(event)
-    setShowDeleteDialog(true)
+  const handleViewAttendance = async (event: Event) => {
+    setAttendanceViewEvent(event)
+    setAttendanceViewLoading(true)
+    setAttendanceViewRecords([])
+    try {
+      const res = await fetch(`/api/attendance?eventId=${event.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        // Sort alphabetically by name
+        data.sort((a: any, b: any) => a.user.name.localeCompare(b.user.name))
+        setAttendanceViewRecords(data)
+      }
+    } catch {
+      toast.error("Failed to load attendance")
+    } finally {
+      setAttendanceViewLoading(false)
+    }
   }
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -452,10 +470,26 @@ export default function EventManagement() {
             Create and manage events, assign scanners, and control attendance periods
           </p>
         </div>
-        <button onClick={() => setShowAddModal(true)} className="action-button btn-primary flex items-center justify-center gap-2 w-full sm:w-auto">
-          <Plus className="w-4 h-4" />
-          Create Event
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowArchived(p => !p)}
+            className={`action-button text-sm flex items-center justify-center gap-2 w-full sm:w-auto ${
+              showArchived ? "btn-secondary" : "btn-ghost"
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            {showArchived ? "Hide Archived" : "Show Archived"}
+            {archivedIds.size > 0 && (
+              <span className="ml-1 bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {archivedIds.size}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="action-button btn-primary flex items-center justify-center gap-2 w-full sm:w-auto">
+            <Plus className="w-4 h-4" />
+            Create Event
+          </button>
+        </div>
       </div>
 
       {/* Events Grid */}
@@ -489,7 +523,7 @@ export default function EventManagement() {
         <div className="text-center py-12 text-muted-foreground">No events found. Create your first event!</div>
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {events.filter(e => !e.parentEventId).map((event) => (
+        {events.filter(e => !e.parentEventId && (showArchived ? archivedIds.has(e.id) : !archivedIds.has(e.id))).map((event) => (
           <div
             key={event.id}
             className={`bg-card rounded-lg border p-6 hover:border-primary/50 transition-colors ${
@@ -655,6 +689,13 @@ export default function EventManagement() {
 
             <div className="flex gap-2">
               <button
+                onClick={() => handleViewAttendance(event)}
+                className="action-button btn-ghost text-sm p-2 text-primary hover:bg-primary/10"
+                title="View attendance list"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => handleManageEvent(event)}
                 className="flex-1 action-button btn-secondary text-sm flex items-center justify-center gap-2"
               >
@@ -662,10 +703,15 @@ export default function EventManagement() {
                 Manage Event
               </button>
               <button
-                onClick={() => confirmDeleteEvent(event)}
-                className="action-button btn-ghost text-sm p-2 text-destructive hover:bg-destructive/10"
+                onClick={() => handleArchiveEvent(event)}
+                className={`action-button btn-ghost text-sm p-2 transition-colors ${
+                  archivedIds.has(event.id)
+                    ? "text-green-600 hover:bg-green-500/10"
+                    : "text-amber-500 hover:bg-amber-500/10"
+                }`}
+                title={archivedIds.has(event.id) ? "Restore event" : "Archive event"}
               >
-                <Trash2 className="w-4 h-4" />
+                <Archive className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -864,7 +910,7 @@ export default function EventManagement() {
                           onClick={() => setIntramuralGames(intramuralGames.filter((_, i) => i !== index))}
                           className="p-1 text-destructive hover:bg-destructive/10 rounded"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                      <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       <div>
@@ -986,24 +1032,84 @@ export default function EventManagement() {
         />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Event</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete <span className="font-semibold">{eventToDelete?.name}</span>? 
-              This action cannot be undone and will remove all associated attendance records.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setEventToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteEvent} className="bg-red-500 hover:bg-red-600">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Attendance View Modal */}
+      {attendanceViewEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-card rounded-t-lg sm:rounded-lg w-full sm:max-w-2xl border border-border max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border flex-shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">{attendanceViewEvent.name}</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Attendance List — sorted alphabetically</p>
+              </div>
+              <button onClick={() => setAttendanceViewEvent(null)} className="p-1 hover:bg-muted rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {attendanceViewLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading attendance...</span>
+              </div>
+            ) : attendanceViewRecords.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">No attendance records for this event</div>
+            ) : (
+              <div className="overflow-auto flex-1">
+                <div className="px-4 sm:px-6 py-3 flex items-center gap-4 text-sm text-muted-foreground border-b border-border bg-muted/30">
+                  <span>{attendanceViewRecords.length} students</span>
+                  <span>·</span>
+                  <span className="text-green-600 dark:text-green-400 font-medium">{attendanceViewRecords.filter(r => r.status === "PRESENT").length} Present</span>
+                  <span>·</span>
+                  <span className="text-yellow-600 dark:text-yellow-400 font-medium">{attendanceViewRecords.filter(r => r.status === "LATE").length} Late</span>
+                  <span>·</span>
+                  <span className="text-red-600 dark:text-red-400 font-medium">{attendanceViewRecords.filter(r => r.status === "ABSENT").length} Absent</span>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr className="bg-muted">
+                      <th className="w-8">#</th>
+                      <th>Name</th>
+                      <th className="hidden sm:table-cell">School ID</th>
+                      <th className="hidden md:table-cell">Course</th>
+                      <th className="hidden lg:table-cell">Year</th>
+                      <th>Time-In</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceViewRecords.map((record: any, index: number) => (
+                      <tr key={record.id}>
+                        <td className="text-muted-foreground text-sm">{index + 1}</td>
+                        <td className="font-medium text-foreground">
+                          <div>{record.user.name}</div>
+                          <div className="sm:hidden text-xs text-muted-foreground">{record.user.schoolId}</div>
+                        </td>
+                        <td className="font-mono text-sm text-primary hidden sm:table-cell">{record.user.schoolId}</td>
+                        <td className="text-muted-foreground text-sm hidden md:table-cell">{record.user.course || "N/A"}</td>
+                        <td className="text-muted-foreground text-sm hidden lg:table-cell">{record.user.year || "N/A"}</td>
+                        <td className="text-sm">
+                          {record.timeIn ? new Date(record.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                        </td>
+                        <td>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            record.status === "PRESENT" ? "bg-green-500/10 text-green-600 dark:text-green-400" :
+                            record.status === "LATE" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
+                            record.status === "ABSENT" ? "bg-red-500/10 text-red-600 dark:text-red-400" :
+                            record.status === "INSIDE" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                            "bg-gray-500/10 text-gray-600 dark:text-gray-400"
+                          }`}>
+                            ● {record.status.charAt(0) + record.status.slice(1).toLowerCase()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1282,7 +1388,7 @@ function EditEventModal({
                       onClick={() => setEditGames(editGames.filter((_, i) => i !== index))}
                       className="p-1 text-destructive hover:bg-destructive/10 rounded"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   <div>

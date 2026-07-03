@@ -2,19 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Search, Edit, Trash2, Eye, Loader2, X, Download } from "lucide-react"
+import { Plus, Search, Edit, Archive, Eye, Loader2, X, Download } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { getCurrentUser } from "@/lib/auth"
 import { QRCodeSVG } from "qrcode.react"
 
@@ -95,8 +85,6 @@ export default function UserManagement() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState("All Roles")
   const [users, setUsers] = useState<User[]>([])
@@ -191,26 +179,51 @@ export default function UserManagement() {
     }
   }
 
-  // Handle delete user
-  const handleDeleteUser = async () => {
-    if (!userToDelete) return
-
-    try {
-      const response = await fetch(`/api/users/${userToDelete.id}`, { method: "DELETE" })
-      if (!response.ok) throw new Error("Failed to delete user")
-      toast.success(`User "${userToDelete.name}" deleted successfully`)
-      setShowDeleteDialog(false)
-      setUserToDelete(null)
-      fetchUsers()
-    } catch (err) {
-      toast.error("Failed to delete user")
+  // Handle archive user (soft delete — sets status to INACTIVE)
+  const handleArchiveUser = async (user: User) => {
+    if (user.status === "INACTIVE") {
+      // Unarchive
+      try {
+        await fetch(`/api/users/${user.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: user.name,
+            email: user.email,
+            phone: user.phone || null,
+            course: user.course || null,
+            year: user.year || null,
+            role: user.role,
+            status: "ACTIVE",
+          }),
+        })
+        toast.success(`User "${user.name}" restored to active`)
+        fetchUsers()
+      } catch {
+        toast.error("Failed to restore user")
+      }
+      return
     }
-  }
-
-  // Open delete confirmation dialog
-  const confirmDelete = (user: User) => {
-    setUserToDelete(user)
-    setShowDeleteDialog(true)
+    try {
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: user.name,
+          email: user.email,
+          phone: user.phone || null,
+          course: user.course || null,
+          year: user.year || null,
+          role: user.role,
+          status: "INACTIVE",
+        }),
+      })
+      if (!response.ok) throw new Error("Failed to archive user")
+      toast.success(`User "${user.name}" archived (set to Inactive)`)
+      fetchUsers()
+    } catch {
+      toast.error("Failed to archive user")
+    }
   }
 
   // Handle view QR code
@@ -422,11 +435,15 @@ export default function UserManagement() {
                       <Edit className="w-4 h-4 text-muted-foreground" />
                     </button>
                     <button 
-                      onClick={() => confirmDelete(user)}
-                      className="p-1 sm:p-1.5 hover:bg-red-500/10 rounded-md transition-colors" 
-                      title="Delete"
+                      onClick={() => handleArchiveUser(user)}
+                      className={`p-1 sm:p-1.5 rounded-md transition-colors ${
+                        user.status === "INACTIVE"
+                          ? "hover:bg-green-500/10 text-green-500"
+                          : "hover:bg-amber-500/10 text-amber-500"
+                      }`}
+                      title={user.status === "INACTIVE" ? "Restore user" : "Archive user"}
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <Archive className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -695,24 +712,6 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete User</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete <span className="font-semibold">{userToDelete?.name}</span>? 
-              This action cannot be undone and will remove all associated attendance records and certificates.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteUser} className="bg-red-500 hover:bg-red-600">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
