@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Search, Edit, Archive, Eye, Loader2, X, Download } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -87,6 +87,7 @@ export default function UserManagement() {
   const [showQRModal, setShowQRModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState("All Roles")
+  const [selectedCourse, setSelectedCourse] = useState("All Courses")
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
@@ -144,6 +145,21 @@ export default function UserManagement() {
   useEffect(() => {
     fetchUsers()
   }, [selectedRole, searchQuery])
+
+  // Derive unique courses from fetched users for the filter dropdown
+  const availableCourses = useMemo(() => {
+    const courses = [...new Set(users.map(u => u.course).filter(Boolean))] as string[]
+    return courses.sort((a, b) => a.localeCompare(b))
+  }, [users])
+
+  // Filter by course and sort alphabetically by name
+  const displayUsers = useMemo(() => {
+    let filtered = users
+    if (selectedCourse !== "All Courses") {
+      filtered = filtered.filter(u => u.course === selectedCourse)
+    }
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+  }, [users, selectedCourse])
 
   // Handle add user
   const handleAddUser = async (e: React.FormEvent) => {
@@ -361,6 +377,17 @@ export default function UserManagement() {
               className="w-full pl-10 pr-4 py-2 rounded-md bg-background border border-border text-foreground placeholder-muted-foreground text-sm"
             />
           </div>
+          <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All Courses">All Courses</SelectItem>
+              {availableCourses.map(course => (
+                <SelectItem key={course} value={course}>{course}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedRole} onValueChange={setSelectedRole}>
             <SelectTrigger className="w-full sm:w-[150px]">
               <SelectValue placeholder="Filter by role" />
@@ -383,7 +410,7 @@ export default function UserManagement() {
           </div>
         ) : error ? (
           <div className="text-center py-12 text-red-500">{error}</div>
-        ) : users.length === 0 ? (
+        ) : displayUsers.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">No users found</div>
         ) : (
         <div className="overflow-x-auto">
@@ -400,7 +427,7 @@ export default function UserManagement() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {displayUsers.map((user) => (
               <tr key={user.id}>
                 <td className="font-mono text-xs sm:text-sm text-primary">{user.schoolId}</td>
                 <td className="font-medium text-foreground text-xs sm:text-sm">{user.name}</td>
