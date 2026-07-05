@@ -142,11 +142,11 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
 // Auto-generate certificates for attendees of a closed event
 async function autoGenerateCertificates(eventId: string, eventName: string) {
   try {
-    // Get all attendance records with timeIn and status PRESENT/APPROVED/INSIDE
+    // Get all attendance records with timeIn and status PRESENT/LATE/APPROVED/INSIDE
     const attendanceRecords = await prisma.attendanceRecord.findMany({
       where: {
         eventId,
-        status: { in: ["PRESENT", "APPROVED", "INSIDE"] },
+        status: { in: ["PRESENT", "LATE", "APPROVED", "INSIDE"] },
         timeIn: { not: null }
       },
       include: {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, Download, ChevronDown, Loader2, X } from "lucide-react"
+import { Search, Filter, Download, ChevronDown, Loader2, X, CalendarIcon } from "lucide-react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -159,7 +159,11 @@ export default function AttendanceMonitoring() {
       case "ABSENT":
         return <span className="badge-danger">● Absent</span>
       case "LATE":
-        return <span className="badge-warning">● Late</span>
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20">
+            ● Late
+          </span>
+        )
       default:
         return <span className="text-muted-foreground text-xs">—</span>
     }

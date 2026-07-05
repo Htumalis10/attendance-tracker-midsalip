@@ -4,24 +4,13 @@ import { useState, useEffect, useMemo } from "react"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 
-// Course options - same as in users page
+// Course options — based on actual enrolled programs
 const COURSES = [
-  "BS Information Technology",
-  "BS Computer Science",
-  "BS Information Systems",
-  "BS Computer Engineering",
-  "BS Electronics Engineering",
-  "BS Electrical Engineering",
-  "BS Civil Engineering",
-  "BS Mechanical Engineering",
-  "BS Accountancy",
-  "BS Business Administration",
-  "BS Hospitality Management",
-  "BS Tourism Management",
-  "BS Nursing",
-  "BS Education",
-  "BA Communication",
-  "Other",
+  "ACT-AD",
+  "ACT-SM",
+  "BSIS",
+  "BTVTED",
+  "BTVTED-CHS",
 ]
 
 const YEAR_ORDER: Record<string, number> = {

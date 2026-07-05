@@ -87,7 +87,7 @@ export async function PUT(
         const attendanceRecords = await prisma.attendanceRecord.findMany({
           where: {
             eventId: id,
-            status: { in: ["PRESENT", "APPROVED", "INSIDE"] },
+            status: { in: ["PRESENT", "LATE", "APPROVED", "INSIDE"] },
             timeIn: { not: null }
           }
         })

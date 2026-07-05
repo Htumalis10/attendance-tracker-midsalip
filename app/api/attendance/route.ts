@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
+import { AttendanceStatus } from "@prisma/client"
 import { getPHTime } from "@/lib/time-utils"
 
 // GET /api/attendance - Get all attendance records
@@ -195,7 +196,7 @@ export async function POST(request: NextRequest) {
       })
 
       let lateMinutes = 0
-      let attendanceStatus = "PRESENT"
+      let attendanceStatus: AttendanceStatus = AttendanceStatus.PRESENT
       
       // Use the appropriate period's timeIn for late calculation
       const periodTimeIn = event ? (
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
           
           // More than 5 minutes late = LATE status
           if (lateMinutes > 5) {
-            attendanceStatus = "LATE"
+            attendanceStatus = AttendanceStatus.LATE
           }
         }
       }
@@ -268,6 +269,11 @@ export async function POST(request: NextRequest) {
         : currentPeriod === "afternoon" ? "afternoonTimeOut"
         : "eveningTimeOut"
 
+      // Preserve LATE status — only promote PENDING/INSIDE to PRESENT on time-out
+      const preservedStatus: AttendanceStatus = existingRecord.status === "LATE"
+        ? AttendanceStatus.LATE
+        : AttendanceStatus.PRESENT
+
       const record = await prisma.attendanceRecord.update({
         where: {
           userId_eventId: {
@@ -277,7 +283,7 @@ export async function POST(request: NextRequest) {
         },
         data: {
           [timeOutField]: new Date(),
-          status: "PRESENT",
+          status: preservedStatus,
         },
         include: {
           user: true,

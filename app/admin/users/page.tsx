@@ -2,30 +2,19 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Search, Edit, Archive, Eye, Loader2, X, Download } from "lucide-react"
+import { Plus, Search, Archive, Eye, Loader2, X, Download, BookOpen } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { getCurrentUser } from "@/lib/auth"
 import { QRCodeSVG } from "qrcode.react"
 
-// Course options
+// Course options — based on actual enrolled programs
 const COURSES = [
-  "BS Information Technology",
-  "BS Computer Science",
-  "BS Information Systems",
-  "BS Computer Engineering",
-  "BS Electronics Engineering",
-  "BS Electrical Engineering",
-  "BS Civil Engineering",
-  "BS Mechanical Engineering",
-  "BS Accountancy",
-  "BS Business Administration",
-  "BS Hospitality Management",
-  "BS Tourism Management",
-  "BS Nursing",
-  "BS Education",
-  "BA Communication",
-  "Other",
+  "ACT-AD",
+  "ACT-SM",
+  "BSIS",
+  "BTVTED",
+  "BTVTED-CHS",
 ]
 
 // Year options for students
@@ -83,7 +72,6 @@ export default function UserManagement() {
 
   const [searchQuery, setSearchQuery] = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
   const [showQRModal, setShowQRModal] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState("All Roles")
@@ -104,18 +92,7 @@ export default function UserManagement() {
     role: "STUDENT",
   })
 
-  // Form state for editing user
-  const [editUser, setEditUser] = useState({
-    id: "",
-    schoolId: "",
-    name: "",
-    email: "",
-    phone: "",
-    course: "",
-    year: "",
-    role: "STUDENT",
-    status: "ACTIVE",
-  })
+
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -248,58 +225,6 @@ export default function UserManagement() {
     setShowQRModal(true)
   }
 
-  // Handle open edit modal
-  const handleOpenEdit = (user: User) => {
-    setEditUser({
-      id: user.id,
-      schoolId: user.schoolId,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || "",
-      course: user.course || "",
-      year: user.year || "",
-      role: user.role,
-      status: user.status,
-    })
-    setShowEditModal(true)
-  }
-
-  // Handle edit user
-  const handleEditUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Validate email format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editUser.email)) {
-      toast.error("Please enter a valid email address")
-      return
-    }
-    try {
-      const response = await fetch(`/api/users/${editUser.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editUser.name,
-          email: editUser.email,
-          phone: editUser.phone || null,
-          course: editUser.course || null,
-          year: editUser.year || null,
-          role: editUser.role,
-          status: editUser.status,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || "Failed to update user")
-      }
-
-      setShowEditModal(false)
-      toast.success("User updated successfully")
-      fetchUsers()
-    } catch (err: any) {
-      toast.error(err.message)
-    }
-  }
-
   // Download QR code as PNG
   const handleDownloadQR = () => {
     if (!selectedUser || !qrRef.current) return
@@ -364,7 +289,7 @@ export default function UserManagement() {
         </button>
       </div>
 
-      {/* Search and Filter */}
+      {/* Search and Role Filter */}
       <div className="bg-card rounded-lg p-3 sm:p-4 border border-border/50">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
           <div className="flex-1 relative">
@@ -377,17 +302,6 @@ export default function UserManagement() {
               className="w-full pl-10 pr-4 py-2 rounded-md bg-background border border-border text-foreground placeholder-muted-foreground text-sm"
             />
           </div>
-          <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Filter by course" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All Courses">All Courses</SelectItem>
-              {availableCourses.map(course => (
-                <SelectItem key={course} value={course}>{course}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Select value={selectedRole} onValueChange={setSelectedRole}>
             <SelectTrigger className="w-full sm:w-[150px]">
               <SelectValue placeholder="Filter by role" />
@@ -398,6 +312,50 @@ export default function UserManagement() {
               <SelectItem value="Sg_officer">SG Officer</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* Course Navigation Buttons */}
+      <div className="bg-card rounded-lg p-3 sm:p-4 border border-border/50">
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Filter by Course</span>
+          {selectedCourse !== "All Courses" && (
+            <button
+              onClick={() => setSelectedCourse("All Courses")}
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Clear
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedCourse("All Courses")}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              selectedCourse === "All Courses"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+            }`}
+          >
+            All Courses
+          </button>
+          {availableCourses.map(course => (
+            <button
+              key={course}
+              onClick={() => setSelectedCourse(course)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                selectedCourse === course
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              }`}
+            >
+              {course}
+            </button>
+          ))}
+          {availableCourses.length === 0 && !isLoading && (
+            <span className="text-xs text-muted-foreground">No courses found</span>
+          )}
         </div>
       </div>
 
@@ -453,13 +411,6 @@ export default function UserManagement() {
                       title="View QR Code"
                     >
                       <Eye className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button 
-                      onClick={() => handleOpenEdit(user)}
-                      className="p-1 sm:p-1.5 hover:bg-muted rounded-md transition-colors" 
-                      title="Edit"
-                    >
-                      <Edit className="w-4 h-4 text-muted-foreground" />
                     </button>
                     <button 
                       onClick={() => handleArchiveUser(user)}
@@ -601,108 +552,6 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Edit User Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-card rounded-t-lg sm:rounded-lg p-4 sm:p-6 w-full sm:max-w-md border border-border max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Edit User</h2>
-              <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-muted rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleEditUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">School ID</label>
-                <p className="font-mono text-primary text-sm py-2">{editUser.schoolId}</p>
-                <p className="text-xs text-muted-foreground">(Cannot be changed)</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Full Name</label>
-                <input
-                  type="text"
-                  value={editUser.name}
-                  onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
-                <input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={editUser.email}
-                  onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 rounded-md bg-background border border-border text-foreground text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Course / Department</label>
-                <Select value={editUser.course} onValueChange={(value) => setEditUser({ ...editUser, course: value })}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select course/department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COURSES.map((course) => (
-                      <SelectItem key={course} value={course}>{course}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Year / Position</label>
-                <Select value={editUser.year} onValueChange={(value) => setEditUser({ ...editUser, year: value })}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={(editUser.role === "STUDENT" || editUser.role === "SG_OFFICER") ? "Select year" : "Select position"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {((editUser.role === "STUDENT" || editUser.role === "SG_OFFICER") ? STUDENT_YEARS : POSITIONS).map((item) => (
-                      <SelectItem key={item} value={item}>{item}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Role</label>
-                  <Select value={editUser.role} onValueChange={(value) => setEditUser({ ...editUser, role: value, year: "" })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="STUDENT">Student</SelectItem>
-                      <SelectItem value="SG_OFFICER">SG Officer</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Status</label>
-                  <Select value={editUser.status} onValueChange={(value) => setEditUser({ ...editUser, status: value })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active</SelectItem>
-                      <SelectItem value="INACTIVE">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 action-button btn-ghost">
-                  Cancel
-                </button>
-                <button type="submit" className="flex-1 action-button btn-primary">
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* QR Code Modal */}
       {showQRModal && selectedUser && (
