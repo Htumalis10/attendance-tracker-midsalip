@@ -71,6 +71,10 @@ export default function EventManagement() {
   const [attendanceViewRecords, setAttendanceViewRecords] = useState<any[]>([])
   const [attendanceViewLoading, setAttendanceViewLoading] = useState(false)
 
+  // Schedule type for the create form
+  type ScheduleType = "morning" | "afternoon" | "evening" | "whole-day" | "morning-afternoon" | "custom"
+  const [scheduleType, setScheduleType] = useState<ScheduleType>("morning")
+
   // Form state for new event
   const [newEvent, setNewEvent] = useState({
     name: "",
@@ -87,6 +91,36 @@ export default function EventManagement() {
     status: "UPCOMING",
     type: "REGULAR" as "REGULAR" | "INTRAMURAL",
   })
+
+  // When schedule type changes, auto-clear irrelevant fields and set smart defaults
+  const handleScheduleChange = (type: ScheduleType) => {
+    setScheduleType(type)
+    switch (type) {
+      case "morning":
+        setNewEvent(prev => ({ ...prev, afternoonTimeIn: "", afternoonTimeOut: "", eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+      case "afternoon":
+        setNewEvent(prev => ({ ...prev, timeIn: "", timeOut: "", eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+      case "evening":
+        setNewEvent(prev => ({ ...prev, timeIn: "", timeOut: "", afternoonTimeIn: "", afternoonTimeOut: "" }))
+        break
+      case "whole-day":
+        // Keep all fields
+        break
+      case "morning-afternoon":
+        setNewEvent(prev => ({ ...prev, eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+      case "custom":
+        // Keep all fields, user controls everything
+        break
+    }
+  }
+
+  // Helper: determine which periods are visible based on schedule type
+  const showMorning = ["morning", "whole-day", "morning-afternoon", "custom"].includes(scheduleType)
+  const showAfternoon = ["afternoon", "whole-day", "morning-afternoon", "custom"].includes(scheduleType)
+  const showEvening = ["evening", "whole-day", "custom"].includes(scheduleType)
   
   // Games for multi-activity events
   const [intramuralGames, setIntramuralGames] = useState<{name: string, timeIn: string, timeOut: string, afternoonTimeIn: string, afternoonTimeOut: string, eveningTimeIn: string, eveningTimeOut: string}[]>([])
@@ -819,61 +853,109 @@ export default function EventManagement() {
                   />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">Tip: Leave Morning Time-Out empty and set Afternoon Time-Out to span across periods.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Morning Time-In</label>
-                  <TimePicker
-                    value={newEvent.timeIn}
-                    onChange={(value) => setNewEvent({ ...newEvent, timeIn: value })}
-                    fixedPeriod="AM"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Morning Time-Out <span className="text-muted-foreground text-xs">(optional)</span></label>
-                  <TimePicker
-                    value={newEvent.timeOut}
-                    onChange={(value) => setNewEvent({ ...newEvent, timeOut: value })}
-                    fixedPeriod="AM"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Afternoon Time-In <span className="text-muted-foreground text-xs">(optional)</span></label>
-                  <TimePicker
-                    value={newEvent.afternoonTimeIn || ""}
-                    onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeIn: value })}
-                    fixedPeriod="PM"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Afternoon Time-Out <span className="text-muted-foreground text-xs">(optional)</span></label>
-                  <TimePicker
-                    value={newEvent.afternoonTimeOut || ""}
-                    onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeOut: value })}
-                    fixedPeriod="PM"
-                  />
+              {/* Event Schedule Selector */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Event Schedule</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { value: "morning" as ScheduleType, label: "☀️ Morning", desc: "AM only" },
+                    { value: "afternoon" as ScheduleType, label: "🌤️ Afternoon", desc: "PM only" },
+                    { value: "evening" as ScheduleType, label: "🌙 Evening", desc: "Night only" },
+                    { value: "morning-afternoon" as ScheduleType, label: "☀️🌤️ AM + PM", desc: "Morning & Afternoon" },
+                    { value: "whole-day" as ScheduleType, label: "📅 Whole Day", desc: "AM + PM + Eve" },
+                    { value: "custom" as ScheduleType, label: "⚙️ Custom", desc: "Pick periods" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleScheduleChange(opt.value)}
+                      className={`px-2 py-2 rounded-lg border text-xs font-medium transition-all ${
+                        scheduleType === opt.value
+                          ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
+                          : "bg-background border-border text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <div>{opt.label}</div>
+                      <div className={`text-[10px] mt-0.5 ${scheduleType === opt.value ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{opt.desc}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Evening Time-In <span className="text-muted-foreground text-xs">(optional)</span></label>
-                  <TimePicker
-                    value={newEvent.eveningTimeIn || ""}
-                    onChange={(value) => setNewEvent({ ...newEvent, eveningTimeIn: value })}
-                    fixedPeriod="PM"
-                  />
+
+              {/* Morning Time Fields */}
+              {showMorning && (
+                <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-3">
+                  <label className="block text-sm font-medium text-amber-600 dark:text-amber-400 mb-2">☀️ Morning Period</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-In</label>
+                      <TimePicker
+                        value={newEvent.timeIn}
+                        onChange={(value) => setNewEvent({ ...newEvent, timeIn: value })}
+                        fixedPeriod="AM"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
+                      <TimePicker
+                        value={newEvent.timeOut}
+                        onChange={(value) => setNewEvent({ ...newEvent, timeOut: value })}
+                        fixedPeriod="AM"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Evening Time-Out <span className="text-muted-foreground text-xs">(optional)</span></label>
-                  <TimePicker
-                    value={newEvent.eveningTimeOut || ""}
-                    onChange={(value) => setNewEvent({ ...newEvent, eveningTimeOut: value })}
-                    fixedPeriod="PM"
-                  />
+              )}
+
+              {/* Afternoon Time Fields */}
+              {showAfternoon && (
+                <div className="bg-orange-500/5 border border-orange-500/15 rounded-lg p-3">
+                  <label className="block text-sm font-medium text-orange-600 dark:text-orange-400 mb-2">🌤️ Afternoon Period</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-In</label>
+                      <TimePicker
+                        value={newEvent.afternoonTimeIn || ""}
+                        onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeIn: value })}
+                        fixedPeriod="PM"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
+                      <TimePicker
+                        value={newEvent.afternoonTimeOut || ""}
+                        onChange={(value) => setNewEvent({ ...newEvent, afternoonTimeOut: value })}
+                        fixedPeriod="PM"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Evening Time Fields */}
+              {showEvening && (
+                <div className="bg-violet-500/5 border border-violet-500/15 rounded-lg p-3">
+                  <label className="block text-sm font-medium text-violet-600 dark:text-violet-400 mb-2">🌙 Evening Period</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-In</label>
+                      <TimePicker
+                        value={newEvent.eveningTimeIn || ""}
+                        onChange={(value) => setNewEvent({ ...newEvent, eveningTimeIn: value })}
+                        fixedPeriod="PM"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
+                      <TimePicker
+                        value={newEvent.eveningTimeOut || ""}
+                        onChange={(value) => setNewEvent({ ...newEvent, eveningTimeOut: value })}
+                        fixedPeriod="PM"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Multi-Activity Games Section */}
               {newEvent.type === "INTRAMURAL" && (
                 <div className="border border-orange-500/20 rounded-lg p-3 space-y-3 bg-orange-500/5">
@@ -913,93 +995,99 @@ export default function EventManagement() {
                       <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div>
-                        <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-In</label>
-                            <TimePicker
-                              value={game.timeIn}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].timeIn = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="AM"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                            <TimePicker
-                              value={game.timeOut}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].timeOut = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="AM"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-In</label>
-                            <TimePicker
-                              value={game.afternoonTimeIn}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].afternoonTimeIn = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="PM"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                            <TimePicker
-                              value={game.afternoonTimeOut}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].afternoonTimeOut = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="PM"
-                            />
+                      {showMorning && (
+                        <div>
+                          <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-In</label>
+                              <TimePicker
+                                value={game.timeIn}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].timeIn = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="AM"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                              <TimePicker
+                                value={game.timeOut}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].timeOut = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="AM"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-In</label>
-                            <TimePicker
-                              value={game.eveningTimeIn}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].eveningTimeIn = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="PM"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                            <TimePicker
-                              value={game.eveningTimeOut}
-                              onChange={(value) => {
-                                const updated = [...intramuralGames]
-                                updated[index].eveningTimeOut = value
-                                setIntramuralGames(updated)
-                              }}
-                              fixedPeriod="PM"
-                            />
+                      )}
+                      {showAfternoon && (
+                        <div>
+                          <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-In</label>
+                              <TimePicker
+                                value={game.afternoonTimeIn}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].afternoonTimeIn = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="PM"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                              <TimePicker
+                                value={game.afternoonTimeOut}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].afternoonTimeOut = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="PM"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+                      {showEvening && (
+                        <div>
+                          <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-In</label>
+                              <TimePicker
+                                value={game.eveningTimeIn}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].eveningTimeIn = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="PM"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Time-Out</label>
+                              <TimePicker
+                                value={game.eveningTimeOut}
+                                onChange={(value) => {
+                                  const updated = [...intramuralGames]
+                                  updated[index].eveningTimeOut = value
+                                  setIntramuralGames(updated)
+                                }}
+                                fixedPeriod="PM"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1128,6 +1216,25 @@ function EditEventModal({
   onSave: (data: any) => void
   onClose: () => void 
 }) {
+  type EditScheduleType = "morning" | "afternoon" | "evening" | "whole-day" | "morning-afternoon" | "custom"
+
+  // Derive schedule type from existing event data
+  const deriveScheduleType = (): EditScheduleType => {
+    const hasMorning = !!event.timeIn || !!event.timeOut
+    const hasAfternoon = !!event.afternoonTimeIn || !!event.afternoonTimeOut
+    const hasEvening = !!event.eveningTimeIn || !!event.eveningTimeOut
+
+    if (hasMorning && hasAfternoon && hasEvening) return "whole-day"
+    if (hasMorning && hasAfternoon) return "morning-afternoon"
+    if (hasMorning && !hasAfternoon && !hasEvening) return "morning"
+    if (!hasMorning && hasAfternoon && !hasEvening) return "afternoon"
+    if (!hasMorning && !hasAfternoon && hasEvening) return "evening"
+    if (hasAfternoon || hasEvening) return "custom"
+    return "morning" // default
+  }
+
+  const [editScheduleType, setEditScheduleType] = useState<EditScheduleType>(deriveScheduleType())
+
   const [formData, setFormData] = useState({
     name: event.name,
     venue: event.venue,
@@ -1148,6 +1255,30 @@ function EditEventModal({
   
   // Check if event is active or closed (started)
   const isEventStarted = event.status === "ACTIVE" || event.status === "CLOSED"
+
+  // Period visibility
+  const editShowMorning = ["morning", "whole-day", "morning-afternoon", "custom"].includes(editScheduleType)
+  const editShowAfternoon = ["afternoon", "whole-day", "morning-afternoon", "custom"].includes(editScheduleType)
+  const editShowEvening = ["evening", "whole-day", "custom"].includes(editScheduleType)
+
+  // Handle schedule type change in edit form
+  const handleEditScheduleChange = (type: EditScheduleType) => {
+    setEditScheduleType(type)
+    switch (type) {
+      case "morning":
+        setFormData(prev => ({ ...prev, afternoonTimeIn: "", afternoonTimeOut: "", eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+      case "afternoon":
+        setFormData(prev => ({ ...prev, timeIn: "", timeOut: "", eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+      case "evening":
+        setFormData(prev => ({ ...prev, timeIn: "", timeOut: "", afternoonTimeIn: "", afternoonTimeOut: "" }))
+        break
+      case "morning-afternoon":
+        setFormData(prev => ({ ...prev, eveningTimeIn: "", eveningTimeOut: "" }))
+        break
+    }
+  }
   
   // Initialize date from event
   useEffect(() => {
@@ -1249,100 +1380,138 @@ function EditEventModal({
               />
             </div>
           </div>
-          {/* Morning Period */}
+
+          {/* Event Schedule Selector */}
           <div>
-            <label className="block text-sm font-medium text-blue-400 mb-1">Morning</label>
-            <p className="text-xs text-muted-foreground mb-1">Tip: Leave Time-Out empty and set Afternoon Time-Out to span across periods.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  Time-In
-                  {isEventStarted && <span className="ml-1">(locked)</span>}
-                </label>
-                {isEventStarted ? (
-                  <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
-                    {formData.timeIn}
-                  </div>
-                ) : (
+            <label className="block text-sm font-medium text-foreground mb-2">Event Schedule</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { value: "morning" as EditScheduleType, label: "☀️ Morning", desc: "AM only" },
+                { value: "afternoon" as EditScheduleType, label: "🌤️ Afternoon", desc: "PM only" },
+                { value: "evening" as EditScheduleType, label: "🌙 Evening", desc: "Night only" },
+                { value: "morning-afternoon" as EditScheduleType, label: "☀️🌤️ AM + PM", desc: "Morning & Afternoon" },
+                { value: "whole-day" as EditScheduleType, label: "📅 Whole Day", desc: "AM + PM + Eve" },
+                { value: "custom" as EditScheduleType, label: "⚙️ Custom", desc: "Pick periods" },
+              ]).map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleEditScheduleChange(opt.value)}
+                  disabled={isEventStarted}
+                  className={`px-2 py-2 rounded-lg border text-xs font-medium transition-all ${
+                    editScheduleType === opt.value
+                      ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20"
+                      : "bg-background border-border text-foreground hover:bg-muted"
+                  } ${isEventStarted ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  <div>{opt.label}</div>
+                  <div className={`text-[10px] mt-0.5 ${editScheduleType === opt.value ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Morning Period */}
+          {editShowMorning && (
+            <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-3">
+              <label className="block text-sm font-medium text-amber-600 dark:text-amber-400 mb-2">☀️ Morning Period</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">
+                    Time-In
+                    {isEventStarted && <span className="ml-1">(locked)</span>}
+                  </label>
+                  {isEventStarted ? (
+                    <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed text-sm">
+                      {formData.timeIn || "—"}
+                    </div>
+                  ) : (
+                    <TimePicker
+                      value={formData.timeIn}
+                      onChange={(value) => setFormData({ ...formData, timeIn: value })}
+                      fixedPeriod="AM"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
                   <TimePicker
-                    value={formData.timeIn}
-                    onChange={(value) => setFormData({ ...formData, timeIn: value })}
+                    value={formData.timeOut}
+                    onChange={(value) => setFormData({ ...formData, timeOut: value })}
                     fixedPeriod="AM"
                   />
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-Out <span className="text-muted-foreground">(optional)</span></label>
-                <TimePicker
-                  value={formData.timeOut}
-                  onChange={(value) => setFormData({ ...formData, timeOut: value })}
-                  fixedPeriod="AM"
-                />
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
           {/* Afternoon Period */}
-          <div>
-            <label className="block text-sm font-medium text-orange-400 mb-1">Afternoon <span className="text-xs text-muted-foreground">(optional)</span></label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  Time-In
-                  {isEventStarted && formData.afternoonTimeIn && <span className="ml-1">(locked)</span>}
-                </label>
-                {isEventStarted && formData.afternoonTimeIn ? (
-                  <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
-                    {formData.afternoonTimeIn}
-                  </div>
-                ) : (
+          {editShowAfternoon && (
+            <div className="bg-orange-500/5 border border-orange-500/15 rounded-lg p-3">
+              <label className="block text-sm font-medium text-orange-600 dark:text-orange-400 mb-2">🌤️ Afternoon Period</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">
+                    Time-In
+                    {isEventStarted && formData.afternoonTimeIn && <span className="ml-1">(locked)</span>}
+                  </label>
+                  {isEventStarted && formData.afternoonTimeIn ? (
+                    <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed text-sm">
+                      {formData.afternoonTimeIn}
+                    </div>
+                  ) : (
+                    <TimePicker
+                      value={formData.afternoonTimeIn}
+                      onChange={(value) => setFormData({ ...formData, afternoonTimeIn: value })}
+                      fixedPeriod="PM"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
                   <TimePicker
-                    value={formData.afternoonTimeIn}
-                    onChange={(value) => setFormData({ ...formData, afternoonTimeIn: value })}
+                    value={formData.afternoonTimeOut}
+                    onChange={(value) => setFormData({ ...formData, afternoonTimeOut: value })}
                     fixedPeriod="PM"
                   />
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
-                <TimePicker
-                  value={formData.afternoonTimeOut}
-                  onChange={(value) => setFormData({ ...formData, afternoonTimeOut: value })}
-                  fixedPeriod="PM"
-                />
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
           {/* Evening Period */}
-          <div>
-            <label className="block text-sm font-medium text-violet-400 mb-1">Evening <span className="text-xs text-muted-foreground">(optional)</span></label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  Time-In
-                  {isEventStarted && formData.eveningTimeIn && <span className="ml-1">(locked)</span>}
-                </label>
-                {isEventStarted && formData.eveningTimeIn ? (
-                  <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed">
-                    {formData.eveningTimeIn}
-                  </div>
-                ) : (
+          {editShowEvening && (
+            <div className="bg-violet-500/5 border border-violet-500/15 rounded-lg p-3">
+              <label className="block text-sm font-medium text-violet-600 dark:text-violet-400 mb-2">🌙 Evening Period</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">
+                    Time-In
+                    {isEventStarted && formData.eveningTimeIn && <span className="ml-1">(locked)</span>}
+                  </label>
+                  {isEventStarted && formData.eveningTimeIn ? (
+                    <div className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-muted-foreground cursor-not-allowed text-sm">
+                      {formData.eveningTimeIn}
+                    </div>
+                  ) : (
+                    <TimePicker
+                      value={formData.eveningTimeIn}
+                      onChange={(value) => setFormData({ ...formData, eveningTimeIn: value })}
+                      fixedPeriod="PM"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
                   <TimePicker
-                    value={formData.eveningTimeIn}
-                    onChange={(value) => setFormData({ ...formData, eveningTimeIn: value })}
+                    value={formData.eveningTimeOut}
+                    onChange={(value) => setFormData({ ...formData, eveningTimeOut: value })}
                     fixedPeriod="PM"
                   />
-                )}
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Time-Out</label>
-                <TimePicker
-                  value={formData.eveningTimeOut}
-                  onChange={(value) => setFormData({ ...formData, eveningTimeOut: value })}
-                  fixedPeriod="PM"
-                />
+                </div>
               </div>
             </div>
-          </div>
+          )}
           
           {/* Games Management */}
           {event.type === "INTRAMURAL" && (
@@ -1391,120 +1560,126 @@ function EditEventModal({
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">
-                          Time-In
-                          {isEventStarted && game.timeIn && <span className="ml-1">(locked)</span>}
-                        </label>
-                        {isEventStarted && game.timeIn ? (
-                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
-                            {game.timeIn}
-                          </div>
-                        ) : (
+                  {editShowMorning && (
+                    <div>
+                      <label className="text-[10px] text-blue-400 font-medium uppercase">Morning</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">
+                            Time-In
+                            {isEventStarted && game.timeIn && <span className="ml-1">(locked)</span>}
+                          </label>
+                          {isEventStarted && game.timeIn ? (
+                            <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                              {game.timeIn}
+                            </div>
+                          ) : (
+                            <TimePicker
+                              value={game.timeIn}
+                              onChange={(value) => {
+                                const updated = [...editGames]
+                                updated[index] = { ...updated[index], timeIn: value }
+                                setEditGames(updated)
+                              }}
+                              fixedPeriod="AM"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Time-Out</label>
                           <TimePicker
-                            value={game.timeIn}
+                            value={game.timeOut}
                             onChange={(value) => {
                               const updated = [...editGames]
-                              updated[index] = { ...updated[index], timeIn: value }
+                              updated[index] = { ...updated[index], timeOut: value }
                               setEditGames(updated)
                             }}
                             fixedPeriod="AM"
                           />
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                        <TimePicker
-                          value={game.timeOut}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], timeOut: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="AM"
-                        />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">
-                          Time-In
-                          {isEventStarted && game.afternoonTimeIn && <span className="ml-1">(locked)</span>}
-                        </label>
-                        {isEventStarted && game.afternoonTimeIn ? (
-                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
-                            {game.afternoonTimeIn}
-                          </div>
-                        ) : (
+                  )}
+                  {editShowAfternoon && (
+                    <div>
+                      <label className="text-[10px] text-orange-400 font-medium uppercase">Afternoon <span className="text-muted-foreground">(optional)</span></label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">
+                            Time-In
+                            {isEventStarted && game.afternoonTimeIn && <span className="ml-1">(locked)</span>}
+                          </label>
+                          {isEventStarted && game.afternoonTimeIn ? (
+                            <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                              {game.afternoonTimeIn}
+                            </div>
+                          ) : (
+                            <TimePicker
+                              value={game.afternoonTimeIn}
+                              onChange={(value) => {
+                                const updated = [...editGames]
+                                updated[index] = { ...updated[index], afternoonTimeIn: value }
+                                setEditGames(updated)
+                              }}
+                              fixedPeriod="PM"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Time-Out</label>
                           <TimePicker
-                            value={game.afternoonTimeIn}
+                            value={game.afternoonTimeOut}
                             onChange={(value) => {
                               const updated = [...editGames]
-                              updated[index] = { ...updated[index], afternoonTimeIn: value }
+                              updated[index] = { ...updated[index], afternoonTimeOut: value }
                               setEditGames(updated)
                             }}
                             fixedPeriod="PM"
                           />
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                        <TimePicker
-                          value={game.afternoonTimeOut}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], afternoonTimeOut: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="PM"
-                        />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">
-                          Time-In
-                          {isEventStarted && game.eveningTimeIn && <span className="ml-1">(locked)</span>}
-                        </label>
-                        {isEventStarted && game.eveningTimeIn ? (
-                          <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
-                            {game.eveningTimeIn}
-                          </div>
-                        ) : (
+                  )}
+                  {editShowEvening && (
+                    <div>
+                      <label className="text-[10px] text-violet-400 font-medium uppercase">Evening <span className="text-muted-foreground">(optional)</span></label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">
+                            Time-In
+                            {isEventStarted && game.eveningTimeIn && <span className="ml-1">(locked)</span>}
+                          </label>
+                          {isEventStarted && game.eveningTimeIn ? (
+                            <div className="w-full px-3 py-1.5 rounded bg-muted border border-border text-muted-foreground text-sm cursor-not-allowed">
+                              {game.eveningTimeIn}
+                            </div>
+                          ) : (
+                            <TimePicker
+                              value={game.eveningTimeIn}
+                              onChange={(value) => {
+                                const updated = [...editGames]
+                                updated[index] = { ...updated[index], eveningTimeIn: value }
+                                setEditGames(updated)
+                              }}
+                              fixedPeriod="PM"
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Time-Out</label>
                           <TimePicker
-                            value={game.eveningTimeIn}
+                            value={game.eveningTimeOut}
                             onChange={(value) => {
                               const updated = [...editGames]
-                              updated[index] = { ...updated[index], eveningTimeIn: value }
+                              updated[index] = { ...updated[index], eveningTimeOut: value }
                               setEditGames(updated)
                             }}
                             fixedPeriod="PM"
                           />
-                        )}
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">Time-Out</label>
-                        <TimePicker
-                          value={game.eveningTimeOut}
-                          onChange={(value) => {
-                            const updated = [...editGames]
-                            updated[index] = { ...updated[index], eveningTimeOut: value }
-                            setEditGames(updated)
-                          }}
-                          fixedPeriod="PM"
-                        />
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

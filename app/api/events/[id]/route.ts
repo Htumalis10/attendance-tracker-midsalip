@@ -84,40 +84,49 @@ export async function PUT(
     // If event is being closed, auto-generate certificates for attendees
     if (isClosingEvent) {
       try {
+        // Get attendance records with any timeIn (morning, afternoon, or evening)
         const attendanceRecords = await prisma.attendanceRecord.findMany({
           where: {
             eventId: id,
             status: { in: ["PRESENT", "LATE", "APPROVED", "INSIDE"] },
-            timeIn: { not: null }
+            OR: [
+              { timeIn: { not: null } },
+              { afternoonTimeIn: { not: null } },
+              { eveningTimeIn: { not: null } },
+            ],
           }
         })
 
         for (const record of attendanceRecords) {
-          const existingCert = await prisma.certificate.findUnique({
-            where: {
-              userId_eventId: { userId: record.userId, eventId: record.eventId }
-            }
-          })
-
-          if (!existingCert) {
-            await prisma.certificate.create({
-              data: {
+          try {
+            // Use upsert to safely handle concurrent calls
+            const cert = await prisma.certificate.upsert({
+              where: {
+                userId_eventId: { userId: record.userId, eventId: record.eventId }
+              },
+              update: {}, // No update needed if already exists
+              create: {
                 userId: record.userId,
                 eventId: record.eventId,
                 title: `Certificate of Attendance - ${event.name}`,
               }
             })
 
-            // Notify student about certificate
-            await prisma.notification.create({
-              data: {
-                userId: record.userId,
-                eventId: record.eventId,
-                title: "Certificate Available! 🎉",
-                message: `Your certificate for "${event.name}" is now available for download.`,
-                type: NotificationType.CERTIFICATE_AVAILABLE
-              }
-            })
+            // Only notify if certificate was just created (issuedAt is recent)
+            const isNew = (Date.now() - new Date(cert.issuedAt).getTime()) < 5000
+            if (isNew) {
+              await prisma.notification.create({
+                data: {
+                  userId: record.userId,
+                  eventId: record.eventId,
+                  title: "Certificate Available! 🎉",
+                  message: `Your certificate for "${event.name}" is now available for download.`,
+                  type: NotificationType.CERTIFICATE_AVAILABLE
+                }
+              })
+            }
+          } catch (innerErr) {
+            console.error(`Error creating certificate for user ${record.userId}:`, innerErr)
           }
         }
       } catch (certError) {

@@ -29,10 +29,30 @@ export async function POST(request: NextRequest) {
     let whereCondition: any = { eventId }
     
     if (criteria === "Time-In & Time-Out") {
-      whereCondition.timeOut = { not: null }
-      whereCondition.status = "PRESENT"
+      // Must have at least one time-in AND at least one time-out in any period
+      whereCondition.AND = [
+        {
+          OR: [
+            { timeIn: { not: null } },
+            { afternoonTimeIn: { not: null } },
+            { eveningTimeIn: { not: null } },
+          ]
+        },
+        {
+          OR: [
+            { timeOut: { not: null } },
+            { afternoonTimeOut: { not: null } },
+            { eveningTimeOut: { not: null } },
+          ]
+        }
+      ]
+      whereCondition.status = { in: ["PRESENT", "LATE", "APPROVED"] }
     } else if (criteria === "Time-In Only") {
-      whereCondition.timeIn = { not: null }
+      whereCondition.OR = [
+        { timeIn: { not: null } },
+        { afternoonTimeIn: { not: null } },
+        { eveningTimeIn: { not: null } },
+      ]
     }
     // "All Attendees" - no additional conditions
 
@@ -48,38 +68,45 @@ export async function POST(request: NextRequest) {
     const certificatesCreated = []
 
     for (const record of attendanceRecords) {
-      // Check if certificate already exists
-      const existingCert = await prisma.certificate.findFirst({
-        where: {
-          userId: record.userId,
-          eventId: record.eventId,
-        },
-      })
-
-      if (!existingCert) {
-        const certificate = await prisma.certificate.create({
-          data: {
+      try {
+        // Use upsert to safely handle concurrent calls
+        const cert = await prisma.certificate.upsert({
+          where: {
+            userId_eventId: {
+              userId: record.userId,
+              eventId: record.eventId,
+            },
+          },
+          update: {}, // No update needed if already exists
+          create: {
             userId: record.userId,
             eventId: record.eventId,
             title: `Certificate of Attendance - ${record.event.name}`,
           },
         })
-        certificatesCreated.push(certificate)
 
-        // Create notification for the student
-        try {
-          await prisma.notification.create({
-            data: {
-              userId: record.userId,
-              eventId: record.eventId,
-              title: "Certificate Available! 🎉",
-              message: `Your certificate for "${record.event.name}" is now available for download.`,
-              type: NotificationType.CERTIFICATE_AVAILABLE
-            }
-          })
-        } catch (notifError) {
-          console.error("Error creating notification:", notifError)
+        // Only create notification if certificate was just created (issuedAt is recent)
+        const isNew = (Date.now() - new Date(cert.issuedAt).getTime()) < 5000
+        if (isNew) {
+          certificatesCreated.push(cert)
+
+          // Create notification for the student
+          try {
+            await prisma.notification.create({
+              data: {
+                userId: record.userId,
+                eventId: record.eventId,
+                title: "Certificate Available! 🎉",
+                message: `Your certificate for "${record.event.name}" is now available for download.`,
+                type: NotificationType.CERTIFICATE_AVAILABLE
+              }
+            })
+          } catch (notifError) {
+            console.error("Error creating notification:", notifError)
+          }
         }
+      } catch (certErr) {
+        console.error(`Error creating certificate for user ${record.userId}:`, certErr)
       }
     }
 

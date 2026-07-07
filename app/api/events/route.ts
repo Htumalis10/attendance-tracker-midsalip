@@ -142,12 +142,17 @@ function getCorrectEventStatus(event: { date: Date; timeIn: string; timeOut: str
 // Auto-generate certificates for attendees of a closed event
 async function autoGenerateCertificates(eventId: string, eventName: string) {
   try {
-    // Get all attendance records with timeIn and status PRESENT/LATE/APPROVED/INSIDE
+    // Get all attendance records with any timeIn (morning, afternoon, or evening)
+    // and status PRESENT/LATE/APPROVED/INSIDE
     const attendanceRecords = await prisma.attendanceRecord.findMany({
       where: {
         eventId,
         status: { in: ["PRESENT", "LATE", "APPROVED", "INSIDE"] },
-        timeIn: { not: null }
+        OR: [
+          { timeIn: { not: null } },
+          { afternoonTimeIn: { not: null } },
+          { eveningTimeIn: { not: null } },
+        ],
       },
       include: {
         user: true
@@ -157,37 +162,40 @@ async function autoGenerateCertificates(eventId: string, eventName: string) {
     let certificatesCreated = 0
 
     for (const record of attendanceRecords) {
-      // Check if certificate already exists
-      const existingCert = await prisma.certificate.findUnique({
-        where: {
-          userId_eventId: {
-            userId: record.userId,
-            eventId: record.eventId,
-          }
-        }
-      })
-
-      if (!existingCert) {
-        // Create certificate
-        await prisma.certificate.create({
-          data: {
+      try {
+        // Use upsert to safely handle concurrent calls
+        const cert = await prisma.certificate.upsert({
+          where: {
+            userId_eventId: {
+              userId: record.userId,
+              eventId: record.eventId,
+            }
+          },
+          update: {}, // No update needed if already exists
+          create: {
             userId: record.userId,
             eventId: record.eventId,
             title: `Certificate of Attendance - ${eventName}`,
           }
         })
-        certificatesCreated++
 
-        // Create notification for student
-        await prisma.notification.create({
-          data: {
-            userId: record.userId,
-            eventId: record.eventId,
-            title: "Certificate Available! 🎉",
-            message: `Your certificate for "${eventName}" is now available for download.`,
-            type: NotificationType.CERTIFICATE_AVAILABLE
-          }
-        })
+        // Only create notification if certificate was just created (check issuedAt is recent)
+        const isNew = (Date.now() - new Date(cert.issuedAt).getTime()) < 5000
+        if (isNew) {
+          certificatesCreated++
+          await prisma.notification.create({
+            data: {
+              userId: record.userId,
+              eventId: record.eventId,
+              title: "Certificate Available! 🎉",
+              message: `Your certificate for "${eventName}" is now available for download.`,
+              type: NotificationType.CERTIFICATE_AVAILABLE
+            }
+          })
+        }
+      } catch (certErr) {
+        // Skip individual errors (e.g., race condition on notification)
+        console.error(`Error creating certificate for user ${record.userId}:`, certErr)
       }
     }
 
@@ -222,11 +230,18 @@ async function markAbsentStudents(eventId: string, eventName: string) {
 
     let absentCount = 0
 
-    // Create ABSENT records for students who didn't scan
+    // Use upsert to safely create ABSENT records (prevents duplicates from race conditions)
     for (const student of absentStudents) {
       try {
-        await prisma.attendanceRecord.create({
-          data: {
+        await prisma.attendanceRecord.upsert({
+          where: {
+            userId_eventId: {
+              userId: student.id,
+              eventId: eventId,
+            }
+          },
+          update: {}, // Don't overwrite if record already exists
+          create: {
             userId: student.id,
             eventId: eventId,
             status: "ABSENT",
@@ -236,7 +251,6 @@ async function markAbsentStudents(eventId: string, eventName: string) {
         })
         absentCount++
       } catch (err) {
-        // Record might already exist (shouldn't happen but just in case)
         console.error(`Failed to create absent record for ${student.name}:`, err)
       }
     }
@@ -264,10 +278,21 @@ async function updateEventStatuses() {
       if (correctStatus !== event.status) {
         const wasClosedBefore = event.status === "CLOSED"
         
-        await prisma.event.update({
-          where: { id: event.id },
+        // Use conditional update to prevent race conditions:
+        // Only update if the status in DB still matches what we read.
+        // This ensures only ONE concurrent caller wins the transition.
+        const updated = await prisma.event.updateMany({
+          where: { 
+            id: event.id,
+            status: event.status as any // Only update if status hasn't changed since we read it
+          },
           data: { status: correctStatus as any }
         })
+        
+        // If no rows updated, another call already transitioned this event — skip side effects
+        if (updated.count === 0) {
+          continue
+        }
         
         // If event just closed (and wasn't closed before), mark absent students and auto-generate certificates
         if (correctStatus === "CLOSED" && !wasClosedBefore) {

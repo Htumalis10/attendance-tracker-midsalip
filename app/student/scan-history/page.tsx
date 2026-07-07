@@ -120,13 +120,27 @@ export default function ScanHistory() {
     return new Date(dateString).toLocaleDateString()
   }
 
-  const calculateDuration = (timeIn: string, timeOut: string | null) => {
-    if (!timeOut) return "—"
-    const start = new Date(timeIn)
-    const end = new Date(timeOut)
-    const diffMs = end.getTime() - start.getTime()
+  const calculateDuration = (record: AttendanceRecord) => {
+    const allTimes = [
+      record.timeIn, record.timeOut,
+      record.afternoonTimeIn, record.afternoonTimeOut,
+      record.eveningTimeIn, record.eveningTimeOut
+    ].filter(Boolean) as string[]
+
+    if (allTimes.length < 2) return "—"
+
+    const timestamps = allTimes.map(t => new Date(t).getTime())
+    const minTime = Math.min(...timestamps)
+    const maxTime = Math.max(...timestamps)
+
+    const diffMs = maxTime - minTime
+    if (diffMs <= 0) return "—"
+
     const hours = Math.floor(diffMs / 3600000)
     const minutes = Math.floor((diffMs % 3600000) / 60000)
+    
+    if (hours === 0 && minutes === 0) return "< 1m"
+    if (hours === 0) return `${minutes}m`
     return `${hours}h ${minutes}m`
   }
 
@@ -227,7 +241,7 @@ export default function ScanHistory() {
                     {record.afternoonTimeOut && <div className="text-xs text-blue-500">PM: {formatTime(record.afternoonTimeOut)}</div>}
                     {record.eveningTimeOut && <div className="text-xs text-violet-500">Eve: {formatTime(record.eveningTimeOut)}</div>}
                   </td>
-                  <td className="text-sm font-medium hidden md:table-cell">{calculateDuration(record.timeIn, record.timeOut)}</td>
+                  <td className="text-sm font-medium hidden md:table-cell">{calculateDuration(record)}</td>
                   <td>
                     {getStatus(record) === "Present" ? (
                       <span className="badge-success text-xs">● Present</span>

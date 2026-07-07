@@ -65,7 +65,20 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(attendanceRecords)
+    // Filter out pure ABSENT records (no scan at all) unless explicitly requested,
+    // to avoid inflating the count with auto-generated absent filler data.
+    const filteredRecords = (status && status.toUpperCase() === "ABSENT")
+      ? attendanceRecords
+      : attendanceRecords.filter(record => {
+          // Keep record if it has ANY time-in (actual attendance data exists)
+          if (record.timeIn || record.afternoonTimeIn || record.eveningTimeIn) return true
+          // Keep record if its status is NOT ABSENT (e.g., PENDING, INSIDE)
+          if (record.status !== "ABSENT") return true
+          // Drop ABSENT records with no scan data — they are auto-generated
+          return false
+        })
+
+    return NextResponse.json(filteredRecords)
   } catch (error) {
     console.error("Error fetching attendance records:", error)
     return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 })
