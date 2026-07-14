@@ -6,13 +6,13 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 // User model - for both admins and students
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
   schoolId      String    @unique // e.g., "20240001" for students, "ADMIN001" for admins
   name          String
   email         String    @unique
@@ -47,9 +47,9 @@ enum Status {
 
 // Event model
 model Event {
-  id            String      @id @default(cuid())
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
   name          String
-  description   String?     @db.Text
+  description   String?
   date          DateTime
   venue         String
   organizer     String
@@ -61,12 +61,12 @@ model Event {
   eveningTimeOut   String?  // Evening time out (e.g., "21:00")
   status        EventStatus @default(UPCOMING)
   type          EventType   @default(REGULAR)
-  parentEventId String?     // For intramural games, links to parent intramural event
+  parentEventId String?     @db.ObjectId // For intramural games, links to parent intramural event
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   // Self-relation for intramural games
-  parentEvent Event?  @relation("IntramuralsGames", fields: [parentEventId], references: [id], onDelete: Cascade)
+  parentEvent Event?  @relation("IntramuralsGames", fields: [parentEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   games       Event[] @relation("IntramuralsGames")
 
   // Relations
@@ -90,9 +90,9 @@ enum EventStatus {
 
 // Attendance Record model
 model AttendanceRecord {
-  id            String           @id @default(cuid())
-  userId        String
-  eventId       String
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String           @db.ObjectId
+  eventId       String           @db.ObjectId
   timeIn        DateTime?
   timeOut       DateTime?
   afternoonTimeIn  DateTime?
@@ -102,7 +102,7 @@ model AttendanceRecord {
   status        AttendanceStatus @default(PENDING)
   lateMinutes   Int?             // Minutes late if applicable
   approvedBy    String?          // Admin who approved/rejected
-  notes         String?          @db.Text
+  notes         String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -126,9 +126,9 @@ enum AttendanceStatus {
 
 // Certificate model
 model Certificate {
-  id          String   @id @default(cuid())
-  userId      String
-  eventId     String
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  eventId     String   @db.ObjectId
   title       String
   issuedAt    DateTime @default(now())
   downloaded  Boolean  @default(false)
@@ -143,7 +143,7 @@ model Certificate {
 
 // Scanner Device model (for sync status)
 model ScannerDevice {
-  id             String       @id @default(cuid())
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
   deviceId       String       @unique // Unique device fingerprint e.g., "DEV-ABC123"
   name           String       // Friendly name e.g., "Laptop - Windows 10/11 (Chrome)"
   deviceType     String       @default("unknown") // mobile, tablet, laptop, desktop
@@ -167,11 +167,11 @@ enum DeviceStatus {
 
 // Notification model
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  eventId   String?
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  eventId   String?          @db.ObjectId
   title     String
-  message   String           @db.Text
+  message   String
   type      NotificationType @default(EVENT_CREATED)
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
